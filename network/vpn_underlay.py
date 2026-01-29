@@ -6,11 +6,14 @@ Uses deterministic kernel routing queries - no heuristics.
 """
 
 import subprocess
-from typing import Optional
+from typing import Optional, List, TYPE_CHECKING
 
 from logging_config import get_logger
 from utils.system import run_command, is_valid_ip
 from config import TIMEOUT_SECONDS
+
+if TYPE_CHECKING:
+    from models import InterfaceInfo
 
 logger = get_logger(__name__)
 
@@ -168,7 +171,7 @@ def get_vpn_server_endpoint(iface_name: str, iface_type: str, local_ip: str) -> 
     return get_vpn_connection_endpoint(iface_name, local_ip)
 
 
-def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces) -> Optional[str]:
+def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces: List["InterfaceInfo"]) -> Optional[str]:
     """
     Determine which physical interface carries traffic to VPN server.
     
@@ -188,7 +191,7 @@ def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces) -> Optio
     logger.debug(f"Finding physical interface carrying VPN traffic to {vpn_server_ip}")
     
     # Find physical interfaces with default gateways
-    candidates = []
+    candidates: List[tuple[str, str]] = []
     for iface in all_interfaces:
         # Look for non-VPN interfaces with default gateways
         if (iface.interface_type in ["ethernet", "wireless", "tether"] and 
@@ -207,12 +210,12 @@ def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces) -> Optio
         999 if x[1] in ["NONE", "DEFAULT", "N/A"] else int(x[1])
     ))
     
-    physical_interface = candidates_sorted[0][0]
+    physical_interface: str = candidates_sorted[0][0]
     logger.info(f"VPN tunnel traffic routes through: {physical_interface} (physical interface with default gateway)")
     return physical_interface
 
 
-def detect_vpn_underlay(interfaces) -> None:
+def detect_vpn_underlay(interfaces: List["InterfaceInfo"]) -> None:
     """
     Detect which physical interfaces carry VPN tunnel traffic.
     
@@ -232,7 +235,7 @@ def detect_vpn_underlay(interfaces) -> None:
     """
     logger.debug("Detecting VPN underlay (physical interfaces carrying VPN traffic)")
     
-    vpn_to_physical = {}  # Map: VPN interface -> physical interface
+    vpn_to_physical: dict[str, str] = {}  # Map: VPN interface -> physical interface
     
     # Find all VPN interfaces and their endpoints
     for interface in interfaces:

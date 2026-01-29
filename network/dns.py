@@ -8,12 +8,22 @@ Requires systemd-resolved to be active.
 """
 
 import subprocess
-from typing import List, Tuple, Optional, Set
+from typing import List, Tuple, Optional, Set, TYPE_CHECKING
 
 from logging_config import get_logger
-from config import TIMEOUT_SECONDS
+from config import (
+    TIMEOUT_SECONDS,
+    PUBLIC_DNS_SERVERS,
+    DNS_CURRENT_SERVER_MARKER,
+    DNS_SERVERS_MARKER,
+    DNS_GLOBAL_SECTION_MARKER,
+    DNS_LINK_SECTION_MARKER,
+)
 from utils.system import is_valid_ip
 from enums import DnsLeakStatus, InterfaceType
+
+if TYPE_CHECKING:
+    from models import InterfaceInfo
 
 logger = get_logger(__name__)
 
@@ -41,7 +51,7 @@ def _extract_ips_from_text(text: str) -> List[str]:
     return [token for token in text.split() if is_valid_ip(token)]
 
 
-def _parse_dns_section(lines: List[str], start_marker: str = "DNS Servers:") -> List[str]:
+def _parse_dns_section(lines: List[str], start_marker: str = DNS_SERVERS_MARKER) -> List[str]:
     """
     Parse DNS server IPs from resolvectl output section.
     
@@ -119,7 +129,7 @@ def _extract_current_dns(lines: List[str]) -> Optional[str]:
         '8.8.8.8'
     """
     for line in lines:
-        if "Current DNS Server:" in line:
+        if DNS_CURRENT_SERVER_MARKER in line:
             if ':' in line:
                 dns_part = line.split(':', 1)[1].strip()
                 ips = _extract_ips_from_text(dns_part)
@@ -161,11 +171,12 @@ def _check_public_dns_usage(configured_dns: List[str]) -> Optional[List[str]]:
     """
     Check if using well-known public DNS providers (acceptable when VPN active).
     
-    Recognizes major public DNS providers:
-    - Cloudflare (1.1.1.1, 1.0.0.1)
+    Recognizes major public DNS providers defined in config.PUBLIC_DNS_SERVERS:
+    - Cloudflare (1.1.1.1, 1.0.0.1, and variants)
     - Google (8.8.8.8, 8.8.4.4)
     - Quad9 (9.9.9.9, 149.112.112.112)
     - OpenDNS (208.67.222.222, 208.67.220.220)
+    - AdGuard DNS
     
     Args:
         configured_dns: DNS servers configured on interface
@@ -173,16 +184,7 @@ def _check_public_dns_usage(configured_dns: List[str]) -> Optional[List[str]]:
     Returns:
         List of public DNS servers in use, or None if none found
     """
-    public_dns = {
-        "1.1.1.1", "1.0.0.1",  # Cloudflare
-        "8.8.8.8", "8.8.4.4",  # Google
-        "9.9.9.9", "149.112.112.112",  # Quad9
-        "208.67.222.222", "208.67.220.220",  # OpenDNS
-        "2606:4700:4700::1111", "2606:4700:4700::1001",  # Cloudflare IPv6
-        "2001:4860:4860::8888", "2001:4860:4860::8844",  # Google IPv6
-    }
-    
-    public_configured = [dns for dns in configured_dns if dns in public_dns]
+    public_configured = [dns for dns in configured_dns if dns in PUBLIC_DNS_SERVERS]
     return public_configured if public_configured else None
 
 
@@ -293,12 +295,12 @@ def get_system_dns() -> List[str]:
                 continue
             
             # Start of Global section
-            if "Global" in line:
+            if DNS_GLOBAL_SECTION_MARKER in line:
                 in_global = True
                 continue
             
             # End of Global section (Link section starts)
-            if "Link " in line and in_global:
+            if DNS_LINK_SECTION_MARKER in line and in_global:
                 break
             
             if in_global:
@@ -386,7 +388,7 @@ def detect_dns_leak(interface_name: str,
     return str(DnsLeakStatus.WARN)
 
 
-def collect_dns_servers_by_category(interfaces) -> Tuple[List[str], List[str]]:
+def collect_dns_servers_by_category(interfaces: List["InterfaceInfo"]) -> Tuple[List[str], List[str]]:
     """
     Categorize DNS servers as VPN or ISP.
     
@@ -396,8 +398,8 @@ def collect_dns_servers_by_category(interfaces) -> Tuple[List[str], List[str]]:
     Returns:
         Tuple of (vpn_dns_list, isp_dns_list)
     """
-    vpn_dns = []
-    isp_dns = []
+    vpn_dns: List[str] = []
+    isp_dns: List[str] = []
     
     for interface in interfaces:
         if interface.dns_servers:
@@ -414,7 +416,7 @@ def collect_dns_servers_by_category(interfaces) -> Tuple[List[str], List[str]]:
     return list(set(vpn_dns)), list(set(isp_dns))
 
 
-def check_dns_leaks_all_interfaces(interfaces) -> None:
+def check_dns_leaks_all_interfaces(interfaces: List["InterfaceInfo"]) -> None:
     """
     Check for DNS leaks across all interfaces.
     
