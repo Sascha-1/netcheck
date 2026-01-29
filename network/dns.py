@@ -13,8 +13,177 @@ from typing import List, Tuple, Optional, Set
 from logging_config import get_logger
 from config import TIMEOUT_SECONDS
 from utils.system import is_valid_ip
+from enums import DnsLeakStatus, InterfaceType
 
 logger = get_logger(__name__)
+
+
+# ============================================================================
+# Private Helper Functions
+# ============================================================================
+
+def _extract_ips_from_text(text: str) -> List[str]:
+    """
+    Extract all valid IP addresses from space-separated text.
+    
+    Args:
+        text: String containing space-separated tokens
+        
+    Returns:
+        List of valid IP addresses found in text
+        
+    Examples:
+        >>> _extract_ips_from_text("8.8.8.8 8.8.4.4 invalid")
+        ['8.8.8.8', '8.8.4.4']
+        >>> _extract_ips_from_text("2001:db8::1 not-an-ip")
+        ['2001:db8::1']
+    """
+    return [token for token in text.split() if is_valid_ip(token)]
+
+
+def _parse_dns_section(lines: List[str], start_marker: str = "DNS Servers:") -> List[str]:
+    """
+    Parse DNS server IPs from resolvectl output section.
+    
+    Handles the multi-line format where DNS servers can appear on:
+    1. Same line as marker: "DNS Servers: 8.8.8.8 8.8.4.4"
+    2. Following indented lines
+    
+    Args:
+        lines: Lines from resolvectl output
+        start_marker: Section start marker (e.g., "DNS Servers:")
+        
+    Returns:
+        List of unique DNS server IPs (preserves order)
+        
+    Examples:
+        >>> lines = [
+        ...     "DNS Servers: 8.8.8.8",
+        ...     "             8.8.4.4",
+        ...     "DNS Domain: example.com"
+        ... ]
+        >>> _parse_dns_section(lines)
+        ['8.8.8.8', '8.8.4.4']
+    """
+    dns_servers: List[str] = []
+    in_section = False
+    
+    for line in lines:
+        line_stripped = line.strip()
+        
+        # Skip empty lines
+        if not line_stripped:
+            continue
+        
+        # Start of DNS section
+        if start_marker in line:
+            in_section = True
+            # Extract IPs from same line if present
+            if ':' in line:
+                dns_part = line.split(':', 1)[1].strip()
+                dns_servers.extend(_extract_ips_from_text(dns_part))
+            continue
+        
+        # Process continuation lines (indented or IP-like)
+        if in_section and line_stripped:
+            # Check if line is indented or starts with digit/colon (IPv4/IPv6)
+            # Note: line_stripped[0] == ':' is for IPv6 like "::1", not section headers
+            if line[0].isspace() or line_stripped[0].isdigit() or line_stripped[0] == ':':
+                dns_servers.extend(_extract_ips_from_text(line_stripped))
+                continue
+            
+            # End of section: non-indented line with colon (new section header)
+            if ':' in line and not is_valid_ip(line.split(':')[0].strip()):
+                break
+    
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(dns_servers))
+
+
+def _extract_current_dns(lines: List[str]) -> Optional[str]:
+    """
+    Extract the currently active DNS server from resolvectl output.
+    
+    Args:
+        lines: Lines from resolvectl output
+        
+    Returns:
+        First DNS server IP from "Current DNS Server:" line, or None
+        
+    Examples:
+        >>> lines = ["Current DNS Server: 8.8.8.8"]
+        >>> _extract_current_dns(lines)
+        '8.8.8.8'
+        >>> lines = ["Current DNS Server: 8.8.8.8 8.8.4.4"]
+        >>> _extract_current_dns(lines)
+        '8.8.8.8'
+    """
+    for line in lines:
+        if "Current DNS Server:" in line:
+            if ':' in line:
+                dns_part = line.split(':', 1)[1].strip()
+                ips = _extract_ips_from_text(dns_part)
+                return ips[0] if ips else None
+    return None
+
+
+def _check_isp_dns_leak(configured_dns: List[str], isp_dns: List[str]) -> Optional[List[str]]:
+    """
+    Check if any configured DNS servers are ISP DNS (leak).
+    
+    Args:
+        configured_dns: DNS servers configured on interface
+        isp_dns: Known ISP DNS servers
+        
+    Returns:
+        List of leaking DNS servers, or None if no leak
+    """
+    leaking = [dns for dns in configured_dns if dns in isp_dns]
+    return leaking if leaking else None
+
+
+def _check_vpn_dns_usage(configured_dns: List[str], vpn_dns: List[str]) -> Optional[List[str]]:
+    """
+    Check if any configured DNS servers are VPN DNS (secure).
+    
+    Args:
+        configured_dns: DNS servers configured on interface
+        vpn_dns: Known VPN DNS servers
+        
+    Returns:
+        List of VPN DNS servers in use, or None if none found
+    """
+    vpn_configured = [dns for dns in configured_dns if dns in vpn_dns]
+    return vpn_configured if vpn_configured else None
+
+
+def _check_public_dns_usage(configured_dns: List[str]) -> Optional[List[str]]:
+    """
+    Check if using well-known public DNS providers (acceptable when VPN active).
+    
+    Recognizes major public DNS providers:
+    - Cloudflare (1.1.1.1, 1.0.0.1)
+    - Google (8.8.8.8, 8.8.4.4)
+    - Quad9 (9.9.9.9, 149.112.112.112)
+    - OpenDNS (208.67.222.222, 208.67.220.220)
+    
+    Args:
+        configured_dns: DNS servers configured on interface
+        
+    Returns:
+        List of public DNS servers in use, or None if none found
+    """
+    public_dns = {
+        "1.1.1.1", "1.0.0.1",  # Cloudflare
+        "8.8.8.8", "8.8.4.4",  # Google
+        "9.9.9.9", "149.112.112.112",  # Quad9
+        "208.67.222.222", "208.67.220.220",  # OpenDNS
+        "2606:4700:4700::1111", "2606:4700:4700::1001",  # Cloudflare IPv6
+        "2001:4860:4860::8888", "2001:4860:4860::8844",  # Google IPv6
+    }
+    
+    public_configured = [dns for dns in configured_dns if dns in public_dns]
+    return public_configured if public_configured else None
 
 
 # ============================================================================
@@ -51,54 +220,21 @@ def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
             logger.debug(f"[{iface_name}] resolvectl query failed (not configured or no systemd-resolved)")
             return [], None
         
-        dns_servers: List[str] = []
-        current_dns: Optional[str] = None
-        in_dns_section = False
+        lines = result.stdout.split('\n')
         
-        for line in result.stdout.split('\n'):
-            line_stripped = line.strip()
-            
-            if not line_stripped:
-                continue
-            
-            # Look for "Current DNS Server:" (the one actively being used)
-            if "Current DNS Server:" in line:
-                if len(parts := line.split(':', 1)) == 2:
-                    dns_part = parts[1].strip()
-                    # Take first IP (in case multiple listed)
-                    for dns in dns_part.split():
-                        if is_valid_ip(dns):
-                            current_dns = dns
-                            # Also add to full list if not already there
-                            if dns not in dns_servers:
-                                dns_servers.insert(0, dns)  # Put current first
-                            logger.debug(f"[{iface_name}] Current DNS: {current_dns}")
-                            break
-                continue
-            
-            # Look for "DNS Servers:" section
-            if "DNS Servers:" in line:
-                in_dns_section = True
-                if len(parts := line.split(':', 1)) == 2:
-                    dns_part = parts[1].strip()
-                    for dns in dns_part.split():
-                        if is_valid_ip(dns) and dns not in dns_servers:
-                            dns_servers.append(dns)
-                continue
-            
-            # Additional DNS servers on following lines
-            if in_dns_section and line_stripped:
-                if line[0].isspace() or line_stripped[0].isdigit() or ':' in line_stripped:
-                    for dns in line_stripped.split():
-                        if is_valid_ip(dns) and dns not in dns_servers:
-                            dns_servers.append(dns)
-                    continue
-            
-            # End DNS section on new labeled section
-            if in_dns_section and line and not line[0].isspace():
-                if ':' in line and not is_valid_ip(line.split(':')[0].strip()):
-                    in_dns_section = False
+        # Extract current DNS (single line)
+        current_dns = _extract_current_dns(lines)
         
+        # Extract all DNS servers
+        dns_servers = _parse_dns_section(lines)
+        
+        # Ensure current DNS is first in list
+        if current_dns:
+            if current_dns in dns_servers:
+                dns_servers.remove(current_dns)
+            dns_servers.insert(0, current_dns)
+        
+        # Logging
         if dns_servers:
             if current_dns:
                 logger.debug(f"[{iface_name}] DNS servers: {', '.join(dns_servers)} (current: {current_dns})")
@@ -144,49 +280,32 @@ def get_system_dns() -> List[str]:
             logger.warning("System DNS: resolvectl query failed")
             return []
         
-        dns_servers = []
-        in_global_section = False
-        in_dns_section = False
+        lines = result.stdout.split('\n')
         
-        for line in result.stdout.split('\n'):
+        # Extract Global section
+        global_lines = []
+        in_global = False
+        
+        for line in lines:
             line_stripped = line.strip()
             
             if not line_stripped:
                 continue
             
-            # Look for Global section
+            # Start of Global section
             if "Global" in line:
-                in_global_section = True
+                in_global = True
                 continue
             
-            # End of global section
-            if "Link " in line and in_global_section:
-                in_global_section = False
+            # End of Global section (Link section starts)
+            if "Link " in line and in_global:
                 break
             
-            if in_global_section:
-                # Look for DNS Servers
-                if "DNS Servers:" in line:
-                    in_dns_section = True
-                    if len(parts := line.split(':', 1)) > 1:
-                        dns_part = parts[1].strip()
-                        for dns in dns_part.split():
-                            if is_valid_ip(dns) and dns not in dns_servers:
-                                dns_servers.append(dns)
-                    continue
-                
-                # Additional DNS servers
-                if in_dns_section and line_stripped:
-                    if line[0].isspace() or line_stripped[0].isdigit() or ':' in line_stripped:
-                        for dns in line_stripped.split():
-                            if is_valid_ip(dns) and dns not in dns_servers:
-                                dns_servers.append(dns)
-                        continue
-                
-                # End DNS section
-                if in_dns_section and line and not line[0].isspace():
-                    if ':' in line and not is_valid_ip(line.split(':')[0].strip()):
-                        in_dns_section = False
+            if in_global:
+                global_lines.append(line)
+        
+        # Parse DNS from Global section using shared helper
+        dns_servers = _parse_dns_section(global_lines)
         
         if dns_servers:
             logger.debug(f"System-wide DNS: {', '.join(dns_servers)}")
@@ -231,49 +350,40 @@ def detect_dns_leak(interface_name: str,
         isp_dns: List of known ISP DNS servers
         
     Returns:
-        "OK" - No leak detected (using VPN DNS or other safe DNS)
-        "LEAK" - DNS leak detected (using ISP DNS)
-        "WARN" - Using unknown DNS servers
-        "--" - Not applicable (no VPN active)
+        DnsLeakStatus value:
+        - OK: No leak detected (using VPN DNS or other safe DNS)
+        - LEAK: DNS leak detected (using ISP DNS)
+        - WARN: Using unknown DNS servers
+        - NOT_APPLICABLE: Not applicable (no VPN active)
     """
     # Only check for leaks if VPN is active somewhere
     if not vpn_dns:
-        return "--"
+        return str(DnsLeakStatus.NOT_APPLICABLE)
     
     # No DNS configured on this interface
     if not configured_dns:
-        return "--"
+        return str(DnsLeakStatus.NOT_APPLICABLE)
     
-    # Check configured DNS servers (deterministic)
     logger.debug(f"[{interface_name}] Checking configured DNS: {configured_dns}")
     
-    # Check if any configured DNS is ISP DNS (LEAK)
-    if leaking_dns := [dns for dns in configured_dns if dns in isp_dns]:
+    # Check for ISP DNS leak (CRITICAL)
+    if leaking_dns := _check_isp_dns_leak(configured_dns, isp_dns):
         logger.warning(f"[{interface_name}] LEAK: Configured with ISP DNS {leaking_dns}")
-        return "LEAK"
+        return str(DnsLeakStatus.LEAK)
     
-    # Check if any configured DNS is VPN DNS (OK)
-    if vpn_configured := [dns for dns in configured_dns if dns in vpn_dns]:
+    # Check for VPN DNS usage (SECURE)
+    if vpn_configured := _check_vpn_dns_usage(configured_dns, vpn_dns):
         logger.debug(f"[{interface_name}] OK: Configured with VPN DNS {vpn_configured}")
-        return "OK"
+        return str(DnsLeakStatus.OK)
     
-    # Check if using other public DNS (Cloudflare, Google, Quad9, etc.) - OK
-    public_dns = {
-        "1.1.1.1", "1.0.0.1",  # Cloudflare
-        "8.8.8.8", "8.8.4.4",  # Google
-        "9.9.9.9", "149.112.112.112",  # Quad9
-        "208.67.222.222", "208.67.220.220",  # OpenDNS
-        "2606:4700:4700::1111", "2606:4700:4700::1001",  # Cloudflare IPv6
-        "2001:4860:4860::8888", "2001:4860:4860::8844",  # Google IPv6
-    }
-    
-    if public_configured := [dns for dns in configured_dns if dns in public_dns]:
+    # Check for public DNS usage (ACCEPTABLE)
+    if public_configured := _check_public_dns_usage(configured_dns):
         logger.debug(f"[{interface_name}] OK: Using public DNS {public_configured}")
-        return "OK"
+        return str(DnsLeakStatus.OK)
     
-    # Unknown DNS servers (neither VPN, ISP, nor known public)
+    # Unknown DNS servers (SUSPICIOUS)
     logger.warning(f"[{interface_name}] WARN: Using unknown DNS {configured_dns}")
-    return "WARN"
+    return str(DnsLeakStatus.WARN)
 
 
 def collect_dns_servers_by_category(interfaces) -> Tuple[List[str], List[str]]:
@@ -291,9 +401,13 @@ def collect_dns_servers_by_category(interfaces) -> Tuple[List[str], List[str]]:
     
     for interface in interfaces:
         if interface.dns_servers:
-            if interface.interface_type == "vpn":
+            if interface.interface_type == str(InterfaceType.VPN):
                 vpn_dns.extend(interface.dns_servers)
-            elif interface.interface_type in ["ethernet", "wireless", "tether"]:
+            elif interface.interface_type in [
+                str(InterfaceType.ETHERNET),
+                str(InterfaceType.WIRELESS),
+                str(InterfaceType.TETHER)
+            ]:
                 isp_dns.extend(interface.dns_servers)
     
     # Remove duplicates
@@ -322,14 +436,14 @@ def check_dns_leaks_all_interfaces(interfaces) -> None:
     # Check each interface
     for interface in interfaces:
         if interface.internal_ipv4 == "N/A":
-            interface.dns_leak_status = "--"
+            interface.dns_leak_status = str(DnsLeakStatus.NOT_APPLICABLE)
             continue
         
         leak_status = detect_dns_leak(
             interface_name=interface.name,
             interface_ip=interface.internal_ipv4,
             configured_dns=interface.dns_servers,
-            is_vpn=(interface.interface_type == "vpn"),
+            is_vpn=(interface.interface_type == str(InterfaceType.VPN)),
             vpn_dns=vpn_dns,
             isp_dns=isp_dns
         )

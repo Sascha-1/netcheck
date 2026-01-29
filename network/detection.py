@@ -4,8 +4,8 @@ Interface and hardware detection module.
 Consolidates interface type detection and hardware identification.
 
 DESIGN PRINCIPLE: Consistent deterministic querying
-- PCI devices: Read vendor:device from sysfs â†’ Query lspci database
-- USB devices: Read vendor:product from sysfs â†’ Query lsusb database
+- PCI devices: Read vendor:device from sysfs → Query lspci database
+- USB devices: Read vendor:product from sysfs → Query lsusb database
 - Return raw data from databases - cleaning happens at display time
 """
 
@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from logging_config import get_logger
 from utils.system import run_command
 from config import INTERFACE_TYPE_PATTERNS, USB_TETHER_DRIVERS
+from enums import InterfaceType, DataMarker
 
 logger = get_logger(__name__)
 
@@ -193,44 +194,44 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> str:
         verbose: If True, use debug logging (legacy parameter)
     
     Returns:
-        Interface type string
+        Interface type string (InterfaceType enum value)
     """
     if iface_name == "lo":
         logger.debug(f"[{iface_name}] Detected as loopback")
-        return "loopback"
+        return str(InterfaceType.LOOPBACK)
     
     sysfs = SysfsInterface(iface_name)
     
     if is_usb_tethered_device(sysfs, verbose):
         logger.debug(f"[{iface_name}] Detected as tether (USB)")
-        return "tether"
+        return str(InterfaceType.TETHER)
     
     if "vpn" in iface_name.lower():
         logger.debug(f"[{iface_name}] Detected as VPN (keyword in name)")
-        return "vpn"
+        return str(InterfaceType.VPN)
     
     if sysfs.is_wireless:
         logger.debug(f"[{iface_name}] Detected as wireless (phy80211 present)")
-        return "wireless"
+        return str(InterfaceType.WIRELESS)
     
     if output := run_command(["ip", "-d", "link", "show", iface_name]):
         output_lower = output.lower()
         
         if "wireguard" in output_lower:
             logger.debug(f"[{iface_name}] Detected as VPN (WireGuard)")
-            return "vpn"
+            return str(InterfaceType.VPN)
         
         if "tun" in output_lower or "tap" in output_lower:
             logger.debug(f"[{iface_name}] Detected as VPN (TUN/TAP)")
-            return "vpn"
+            return str(InterfaceType.VPN)
         
         if "veth" in output_lower:
             logger.debug(f"[{iface_name}] Detected as virtual (veth)")
-            return "virtual"
+            return str(InterfaceType.VIRTUAL)
         
         if "bridge" in output_lower:
             logger.debug(f"[{iface_name}] Detected as bridge")
-            return "bridge"
+            return str(InterfaceType.BRIDGE)
     
     for prefix, iface_type in INTERFACE_TYPE_PATTERNS.items():
         if iface_name.startswith(prefix):
@@ -238,7 +239,7 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> str:
             return iface_type
     
     logger.warning(f"[{iface_name}] Type unknown (no detection method matched)")
-    return "unknown"
+    return str(InterfaceType.UNKNOWN)
 
 
 def get_pci_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | None:
@@ -347,7 +348,7 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
     Get hardware device name for network interface.
     
     Consistent approach:
-    - Virtual interfaces (loopback, VPN): Return "N/A"
+    - Virtual interfaces (loopback, VPN): Return DataMarker.NOT_AVAILABLE
     - PCI devices: Query lspci database
     - USB devices: Query lsusb database
     
@@ -355,17 +356,17 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
     
     Args:
         iface_name: Interface name
-        iface_type: Interface type
+        iface_type: Interface type (InterfaceType enum value)
         verbose: If True, use debug logging (legacy parameter)
         
     Returns:
-        Raw device name or "N/A"
+        Raw device name or DataMarker.NOT_AVAILABLE
     """
     match iface_type:
-        case "loopback":
-            return "N/A"
+        case str(InterfaceType.LOOPBACK) | InterfaceType.LOOPBACK.value:
+            return str(DataMarker.NOT_AVAILABLE)
         
-        case "vpn":
+        case str(InterfaceType.VPN) | InterfaceType.VPN.value:
             sysfs = SysfsInterface(iface_name)
             
             if sysfs.device_path:
@@ -382,13 +383,13 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
                     else:
                         logger.debug(f"[{iface_name}] VPN protocol: Generic")
             
-            return "N/A"
+            return str(DataMarker.NOT_AVAILABLE)
         
-        case "tether":
+        case str(InterfaceType.TETHER) | InterfaceType.TETHER.value:
             sysfs = SysfsInterface(iface_name)
             return get_usb_device_name(sysfs, verbose) or "USB Tethered Device"
         
         case _:
             # Physical PCI/PCIe devices
             sysfs = SysfsInterface(iface_name)
-            return get_pci_device_name(sysfs, verbose) or "N/A"
+            return get_pci_device_name(sysfs, verbose) or str(DataMarker.NOT_AVAILABLE)

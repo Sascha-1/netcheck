@@ -17,6 +17,7 @@ from network.configuration import get_internal_ipv4, get_internal_ipv6, get_defa
 from network.dns import get_interface_dns, check_dns_leaks_all_interfaces
 from network.egress import get_egress_info
 from network.vpn_underlay import detect_vpn_underlay
+from enums import InterfaceType, DataMarker
 
 logger = get_logger(__name__)
 
