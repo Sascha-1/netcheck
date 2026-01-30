@@ -1,0 +1,38 @@
+[tool.mypy]
+# Enforce Python 3.12 strictness
+python_version = "3.12"
+strict = true
+
+# Additional strictness beyond the --strict flag
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+
+# Ensure all imports are typed or explicitly ignored
+disallow_untyped_decorators = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+# Enforce strict testing rules
+minversion = "7.4"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+# -ra: show extra test summary info for all except passed
+# --strict-markers: any markers used must be defined in this file
+# --strict-config: any warnings in config cause an error
+addopts = "-ra --strict-markers --strict-config"
+
+# Fail if a test is marked as xfail but actually passes
+xfail_strict = true
+
+# Filter warnings to be treated as errors (strict 3.12 mode)
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+]
+

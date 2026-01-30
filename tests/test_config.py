@@ -5,6 +5,17 @@ Ensures that all constants in config.py are properly defined,
 sorted, and contain expected values.
 """
 
+from models import InterfaceInfo, EgressInfo
+
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
+from unittest.mock import MagicMock
+from _pytest.logging import LogCaptureFixture
+from _pytest.capture import CaptureFixture
+from _pytest.config import Config
+from _pytest.monkeypatch import MonkeyPatch
+
+
 import pytest
 from config import (
     REQUIRED_COMMANDS,

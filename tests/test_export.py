@@ -5,6 +5,15 @@ Tests the export module's ability to convert InterfaceInfo objects
 to JSON and CSV formats.
 """
 
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
+from unittest.mock import MagicMock
+from _pytest.logging import LogCaptureFixture
+from _pytest.capture import CaptureFixture
+from _pytest.config import Config
+from _pytest.monkeypatch import MonkeyPatch
+
+
 import pytest
 import json
 import csv

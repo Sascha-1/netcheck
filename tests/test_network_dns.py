@@ -4,6 +4,17 @@ Tests for network.dns module.
 Tests DNS configuration detection and DNS leak monitoring.
 """
 
+from models import InterfaceInfo, EgressInfo
+
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
+from unittest.mock import MagicMock
+from _pytest.logging import LogCaptureFixture
+from _pytest.capture import CaptureFixture
+from _pytest.config import Config
+from _pytest.monkeypatch import MonkeyPatch
+
+
 import pytest
 from unittest.mock import patch, Mock
 from network.dns import (
@@ -19,7 +30,8 @@ class TestGetInterfaceDns:
     """Test DNS server retrieval for interface."""
     
     @patch('network.dns.subprocess.run')
-    def test_basic_dns_servers(self, mock_run):
+    def test_basic_dns_servers(self, mock_run: MagicMock) -> None:
+
         """Test retrieving basic DNS configuration."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -40,7 +52,8 @@ class TestGetInterfaceDns:
         assert current_dns == "8.8.8.8"
     
     @patch('network.dns.subprocess.run')
-    def test_current_dns_not_in_list(self, mock_run):
+    def test_current_dns_not_in_list(self, mock_run: MagicMock) -> None:
+
         """Test when current DNS is added to list."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -58,7 +71,8 @@ class TestGetInterfaceDns:
         assert dns_list[0] == "1.1.1.1"
     
     @patch('network.dns.subprocess.run')
-    def test_no_dns_configured(self, mock_run):
+    def test_no_dns_configured(self, mock_run: MagicMock) -> None:
+
         """Test interface without DNS configuration."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -72,7 +86,8 @@ class TestGetInterfaceDns:
         assert current_dns is None
     
     @patch('network.dns.subprocess.run')
-    def test_resolvectl_failure(self, mock_run):
+    def test_resolvectl_failure(self, mock_run: MagicMock) -> None:
+
         """Test handling of resolvectl command failure."""
         mock_result = Mock()
         mock_result.returncode = 1
@@ -84,7 +99,8 @@ class TestGetInterfaceDns:
         assert current_dns is None
     
     @patch('network.dns.subprocess.run')
-    def test_ipv6_dns_servers(self, mock_run):
+    def test_ipv6_dns_servers(self, mock_run: MagicMock) -> None:
+
         """Test IPv6 DNS servers."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -101,7 +117,8 @@ class TestGetInterfaceDns:
         assert current_dns == "2001:db8::1"
     
     @patch('network.dns.subprocess.run')
-    def test_vpn_dns_server(self, mock_run):
+    def test_vpn_dns_server(self, mock_run: MagicMock) -> None:
+
         """Test VPN DNS configuration."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -116,7 +133,8 @@ class TestGetInterfaceDns:
         assert current_dns == "10.2.0.1"
     
     @patch('network.dns.subprocess.run')
-    def test_timeout(self, mock_run):
+    def test_timeout(self, mock_run: MagicMock) -> None:
+
         """Test handling of timeout."""
         mock_run.side_effect = Exception("timeout")
         
@@ -130,7 +148,8 @@ class TestGetSystemDns:
     """Test system-wide DNS retrieval."""
     
     @patch('network.dns.subprocess.run')
-    def test_global_dns_servers(self, mock_run):
+    def test_global_dns_servers(self, mock_run: MagicMock) -> None:
+
         """Test retrieving global DNS configuration."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -151,7 +170,8 @@ Link 2 (eth0)
         assert "8.8.4.4" in dns_list
     
     @patch('network.dns.subprocess.run')
-    def test_no_global_dns(self, mock_run):
+    def test_no_global_dns(self, mock_run: MagicMock) -> None:
+
         """Test when no global DNS is configured."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -167,7 +187,8 @@ Link 2 (eth0)"""
         assert dns_list == []
     
     @patch('network.dns.subprocess.run')
-    def test_command_failure(self, mock_run):
+    def test_command_failure(self, mock_run: MagicMock) -> None:
+
         """Test handling of command failure."""
         mock_result = Mock()
         mock_result.returncode = 1
@@ -183,7 +204,8 @@ Link 2 (eth0)"""
 class TestDetectDnsLeak:
     """Test DNS leak detection logic (deterministic, configuration-based)."""
     
-    def test_no_vpn_active(self):
+    def test_no_vpn_active(self) -> None:
+
         """Test when no VPN is active."""
         result = detect_dns_leak(
             interface_name="eth0",
@@ -196,7 +218,8 @@ class TestDetectDnsLeak:
         
         assert result == "--"
     
-    def test_leak_via_isp_dns(self):
+    def test_leak_via_isp_dns(self) -> None:
+
         """Test leak detected when using ISP DNS."""
         result = detect_dns_leak(
             interface_name="eth0",
@@ -209,7 +232,8 @@ class TestDetectDnsLeak:
         
         assert result == "LEAK"
     
-    def test_ok_via_vpn_dns(self):
+    def test_ok_via_vpn_dns(self) -> None:
+
         """Test OK status when using VPN DNS."""
         result = detect_dns_leak(
             interface_name="tun0",
@@ -222,7 +246,8 @@ class TestDetectDnsLeak:
         
         assert result == "OK"
     
-    def test_ok_via_public_dns(self):
+    def test_ok_via_public_dns(self) -> None:
+
         """Test OK status when using public DNS (Cloudflare)."""
         result = detect_dns_leak(
             interface_name="eth0",
@@ -235,7 +260,8 @@ class TestDetectDnsLeak:
         
         assert result == "OK"
     
-    def test_ok_via_google_dns(self):
+    def test_ok_via_google_dns(self) -> None:
+
         """Test OK status when using Google DNS."""
         result = detect_dns_leak(
             interface_name="eth0",
@@ -248,7 +274,8 @@ class TestDetectDnsLeak:
         
         assert result == "OK"
     
-    def test_warn_unknown_dns(self):
+    def test_warn_unknown_dns(self) -> None:
+
         """Test warning for unknown DNS server."""
         result = detect_dns_leak(
             interface_name="eth0",
@@ -261,7 +288,8 @@ class TestDetectDnsLeak:
         
         assert result == "WARN"
     
-    def test_no_configured_dns(self):
+    def test_no_configured_dns(self) -> None:
+
         """Test when no DNS configured."""
         result = detect_dns_leak(
             interface_name="eth0",
@@ -278,14 +306,16 @@ class TestDetectDnsLeak:
 class TestCollectDnsServersByCategory:
     """Test DNS server categorization."""
     
-    def test_categorize_vpn_and_isp(self, sample_interface_list):
+    def test_categorize_vpn_and_isp(self, sample_interface_list: Any) -> None:
+
         """Test categorizing VPN and ISP DNS servers."""
         vpn_dns, isp_dns = collect_dns_servers_by_category(sample_interface_list)
         
         assert len(vpn_dns) > 0
         assert len(isp_dns) > 0
     
-    def test_no_duplicates(self):
+    def test_no_duplicates(self) -> None:
+
         """Test that duplicates are removed."""
         from models import InterfaceInfo
         
@@ -333,7 +363,8 @@ class TestCollectDnsServersByCategory:
 class TestCheckDnsLeaksAllInterfaces:
     """Test complete DNS leak checking."""
     
-    def test_update_interface_status(self, sample_interface_list):
+    def test_update_interface_status(self, sample_interface_list: Any) -> None:
+
         """Test that interface status is updated."""
         # Initially all should be "--"
         check_dns_leaks_all_interfaces(sample_interface_list)
@@ -343,7 +374,8 @@ class TestCheckDnsLeaksAllInterfaces:
             # dns_leak_status should be set to something
             assert interface.dns_leak_status in ["OK", "LEAK", "WARN", "--"]
     
-    def test_interfaces_without_ipv4(self):
+    def test_interfaces_without_ipv4(self) -> None:
+
         """Test that interfaces without IPv4 get '--' status."""
         from models import InterfaceInfo
         

@@ -4,6 +4,15 @@ Tests for network.vpn_underlay module.
 Tests VPN server endpoint detection and physical interface underlay detection.
 """
 
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
+from unittest.mock import MagicMock
+from _pytest.logging import LogCaptureFixture
+from _pytest.capture import CaptureFixture
+from _pytest.config import Config
+from _pytest.monkeypatch import MonkeyPatch
+
+
 import pytest
 from unittest.mock import patch, Mock
 from network.vpn_underlay import (
@@ -20,7 +29,8 @@ class TestGetVpnConnectionEndpoint:
     """Test generic VPN connection endpoint detection."""
     
     @patch('network.vpn_underlay.subprocess.run')
-    def test_successful_connection_detection(self, mock_run):
+    def test_successful_connection_detection(self, mock_run: MagicMock) -> None:
+
         """Test finding VPN server from active connection."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -33,7 +43,8 @@ udp   ESTAB      0      0      10.2.0.2:54321       159.26.108.89:51820"""
         assert result == "159.26.108.89"
     
     @patch('network.vpn_underlay.subprocess.run')
-    def test_ignores_dns_connections(self, mock_run):
+    def test_ignores_dns_connections(self, mock_run: MagicMock) -> None:
+
         """Test that DNS connections are ignored."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -48,7 +59,8 @@ udp   ESTAB      0      0      10.2.0.2:54322       159.26.108.89:51820"""
         assert result == "159.26.108.89"
     
     @patch('network.vpn_underlay.subprocess.run')
-    def test_ipv6_connection(self, mock_run):
+    def test_ipv6_connection(self, mock_run: MagicMock) -> None:
+
         """Test IPv6 VPN connection."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -61,7 +73,8 @@ udp   ESTAB      0      0      [2a07:b944::2:2]:54321  [2001:db8::1]:51820"""
         assert result == "2001:db8::1"
     
     @patch('network.vpn_underlay.subprocess.run')
-    def test_no_matching_connection(self, mock_run):
+    def test_no_matching_connection(self, mock_run: MagicMock) -> None:
+
         """Test when no connection matches VPN interface."""
         mock_result = Mock()
         mock_result.returncode = 0
@@ -74,7 +87,8 @@ udp   ESTAB  192.168.1.100:54321  8.8.8.8:53"""
         assert result is None
     
     @patch('network.vpn_underlay.subprocess.run')
-    def test_command_failure(self, mock_run):
+    def test_command_failure(self, mock_run: MagicMock) -> None:
+
         """Test ss command failure."""
         mock_result = Mock()
         mock_result.returncode = 1
@@ -89,7 +103,8 @@ class TestGetVpnServerEndpoint:
     """Test VPN server endpoint detection (connection-based)."""
     
     @patch('network.vpn_underlay.get_vpn_connection_endpoint')
-    def test_successful_detection(self, mock_conn):
+    def test_successful_detection(self, mock_conn: MagicMock) -> None:
+
         """Test that connection detection works."""
         mock_conn.return_value = "159.26.108.89"
         
@@ -98,13 +113,15 @@ class TestGetVpnServerEndpoint:
         assert result == "159.26.108.89"
         mock_conn.assert_called_once()
     
-    def test_non_vpn_interface(self):
+    def test_non_vpn_interface(self) -> None:
+
         """Test that non-VPN interfaces return None."""
         result = get_vpn_server_endpoint("eth0", "ethernet", "192.168.1.100")
         
         assert result is None
     
-    def test_no_local_ip(self):
+    def test_no_local_ip(self) -> None:
+
         """Test when interface has no local IP."""
         result = get_vpn_server_endpoint("tun0", "vpn", "N/A")
         
@@ -114,7 +131,8 @@ class TestGetVpnServerEndpoint:
 class TestFindPhysicalInterfaceForVpn:
     """Test physical interface detection for VPN."""
     
-    def test_successful_detection(self):
+    def test_successful_detection(self) -> None:
+
         """Test finding physical interface from gateway method."""
         from models import InterfaceInfo
         
@@ -134,7 +152,8 @@ class TestFindPhysicalInterfaceForVpn:
         assert result == "eth0"
     
     @patch('network.vpn_underlay.run_command')
-    def test_direct_route(self, mock_run):
+    def test_direct_route(self, mock_run: MagicMock) -> None:
+
         """Test direct route without via gateway."""
         from models import InterfaceInfo
         
@@ -151,7 +170,8 @@ class TestFindPhysicalInterfaceForVpn:
         assert result == "wlan0"
     
     @patch('network.vpn_underlay.run_command')
-    def test_command_failure(self, mock_run):
+    def test_command_failure(self, mock_run: MagicMock) -> None:
+
         """Test when route command fails - uses fallback method."""
         from models import InterfaceInfo
         
@@ -172,7 +192,8 @@ class TestFindPhysicalInterfaceForVpn:
         assert result == "eth0"  # Fallback finds physical interface with gateway
     
     @patch('network.vpn_underlay.run_command')
-    def test_malformed_output(self, mock_run):
+    def test_malformed_output(self, mock_run: MagicMock) -> None:
+
         """Test malformed route output - uses fallback."""
         from models import InterfaceInfo
         
@@ -189,7 +210,8 @@ class TestFindPhysicalInterfaceForVpn:
         
         assert result == "eth0"  # Fallback finds physical interface
     
-    def test_ipv6_route(self):
+    def test_ipv6_route(self) -> None:
+
         """Test IPv6 VPN server with physical interface."""
         from models import InterfaceInfo
         
@@ -205,7 +227,8 @@ class TestFindPhysicalInterfaceForVpn:
         assert result == "eth0"
     
     @patch('network.vpn_underlay.run_command')
-    def test_protonvpn_routing_table(self, mock_run):
+    def test_protonvpn_routing_table(self, mock_run: MagicMock) -> None:
+
         """Test ProtonVPN case where ip route get returns VPN interface."""
         from models import InterfaceInfo
         
@@ -227,7 +250,8 @@ class TestFindPhysicalInterfaceForVpn:
         assert result == "eno2"
     
     @patch('network.vpn_underlay.run_command')
-    def test_no_physical_interface(self, mock_run):
+    def test_no_physical_interface(self, mock_run: MagicMock) -> None:
+
         """Test when no physical interfaces have default gateway."""
         from models import InterfaceInfo
         
@@ -249,7 +273,8 @@ class TestDetectVpnUnderlay:
     
     @patch('network.vpn_underlay.find_physical_interface_for_vpn')
     @patch('network.vpn_underlay.get_vpn_server_endpoint')
-    def test_single_vpn_detection(self, mock_get_endpoint, mock_find_physical):
+    def test_single_vpn_detection(self, mock_get_endpoint: MagicMock, mock_find_physical: MagicMock) -> None:
+
         """Test detecting underlay for single VPN."""
         mock_get_endpoint.return_value = "159.26.108.89"
         mock_find_physical.return_value = "eth0"
@@ -301,7 +326,8 @@ class TestDetectVpnUnderlay:
     
     @patch('network.vpn_underlay.find_physical_interface_for_vpn')
     @patch('network.vpn_underlay.get_vpn_server_endpoint')
-    def test_multiple_vpn_same_physical(self, mock_get_endpoint, mock_find_physical):
+    def test_multiple_vpn_same_physical(self, mock_get_endpoint: MagicMock, mock_find_physical: MagicMock) -> None:
+
         """Test multiple VPNs using same physical interface."""
         mock_get_endpoint.side_effect = ["159.26.108.89", "159.26.108.90"]
         mock_find_physical.return_value = "eth0"
@@ -329,7 +355,8 @@ class TestDetectVpnUnderlay:
     
     @patch('network.vpn_underlay.find_physical_interface_for_vpn')
     @patch('network.vpn_underlay.get_vpn_server_endpoint')
-    def test_vpn_endpoint_not_found(self, mock_get_endpoint, mock_find_physical):
+    def test_vpn_endpoint_not_found(self, mock_get_endpoint: MagicMock, mock_find_physical: MagicMock) -> None:
+
         """Test when VPN endpoint cannot be determined."""
         mock_get_endpoint.return_value = None
         
@@ -354,7 +381,8 @@ class TestDetectVpnUnderlay:
     
     @patch('network.vpn_underlay.find_physical_interface_for_vpn')
     @patch('network.vpn_underlay.get_vpn_server_endpoint')
-    def test_no_vpn_interfaces(self, mock_get_endpoint, mock_find_physical):
+    def test_no_vpn_interfaces(self, mock_get_endpoint: MagicMock, mock_find_physical: MagicMock) -> None:
+
         """Test when no VPN interfaces exist."""
         interfaces = [
             InterfaceInfo.create_empty("eth0"),

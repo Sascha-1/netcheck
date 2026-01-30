@@ -4,6 +4,15 @@ Tests for network.egress module.
 Tests external IP and ISP information retrieval from ipinfo.io.
 """
 
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
+from unittest.mock import MagicMock
+from _pytest.logging import LogCaptureFixture
+from _pytest.capture import CaptureFixture
+from _pytest.config import Config
+from _pytest.monkeypatch import MonkeyPatch
+
+
 import pytest
 from unittest.mock import patch, Mock
 import requests
@@ -15,7 +24,8 @@ class TestGetEgressInfo:
     """Test egress information retrieval."""
     
     @patch('network.egress.requests.get')
-    def test_successful_query(self, mock_get):
+    def test_successful_query(self, mock_get: Any) -> None:
+
         """Test successful API query for both IPv4 and IPv6."""
         # Mock IPv4 response
         mock_ipv4 = Mock()
@@ -46,7 +56,8 @@ class TestGetEgressInfo:
         assert mock_get.call_count == 2
     
     @patch('network.egress.requests.get')
-    def test_vpn_egress(self, mock_get):
+    def test_vpn_egress(self, mock_get: Any) -> None:
+
         """Test VPN egress information with IPv6."""
         mock_ipv4 = Mock()
         mock_ipv4.status_code = 200
@@ -74,7 +85,8 @@ class TestGetEgressInfo:
         assert result.country == "SE"
     
     @patch('network.egress.requests.get')
-    def test_http_error_status(self, mock_get):
+    def test_http_error_status(self, mock_get: Any) -> None:
+
         """Test handling of HTTP error status."""
         mock_response = Mock()
         mock_response.status_code = 500
@@ -88,7 +100,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_timeout(self, mock_get):
+    def test_timeout(self, mock_get: Any) -> None:
+
         """Test handling of request timeout."""
         mock_get.side_effect = requests.exceptions.Timeout()
         
@@ -100,7 +113,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_connection_error(self, mock_get):
+    def test_connection_error(self, mock_get: Any) -> None:
+
         """Test handling of connection error."""
         mock_get.side_effect = requests.exceptions.ConnectionError()
         
@@ -112,7 +126,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_request_exception(self, mock_get):
+    def test_request_exception(self, mock_get: Any) -> None:
+
         """Test handling of general request exception."""
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
         
@@ -124,7 +139,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_unexpected_exception(self, mock_get):
+    def test_unexpected_exception(self, mock_get: Any) -> None:
+
         """Test handling of unexpected exception."""
         mock_get.side_effect = Exception("Unexpected error")
         
@@ -136,7 +152,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_missing_fields(self, mock_get):
+    def test_missing_fields(self, mock_get: Any) -> None:
+
         """Test handling of missing fields in response."""
         mock_ipv4 = Mock()
         mock_ipv4.status_code = 200
@@ -161,7 +178,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_empty_response(self, mock_get):
+    def test_empty_response(self, mock_get: Any) -> None:
+
         """Test handling of empty response."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -176,7 +194,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_json_decode_error(self, mock_get):
+    def test_json_decode_error(self, mock_get: Any) -> None:
+
         """Test handling of JSON decode error."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -191,7 +210,8 @@ class TestGetEgressInfo:
         assert result.country == "ERR"
     
     @patch('network.egress.requests.get')
-    def test_no_ipv6_available(self, mock_get):
+    def test_no_ipv6_available(self, mock_get: Any) -> None:
+
         """Test handling when IPv6 is not available."""
         mock_ipv4 = Mock()
         mock_ipv4.status_code = 200
@@ -212,7 +232,8 @@ class TestGetEgressInfo:
         assert result.country == "US"
     
     @patch('network.egress.requests.get')
-    def test_raw_isp_format_preserved(self, mock_get):
+    def test_raw_isp_format_preserved(self, mock_get: Any) -> None:
+
         """Test that raw ISP format with ASN is preserved."""
         mock_ipv4 = Mock()
         mock_ipv4.status_code = 200
@@ -238,7 +259,8 @@ class TestGetEgressInfo:
         assert result.isp == "AS12345 Some Very Long ISP Name Corporation"
     
     @patch('network.egress.requests.get')
-    def test_timeout_value_used(self, mock_get):
+    def test_timeout_value_used(self, mock_get: Any) -> None:
+
         """Test that timeout value from config is used."""
         mock_ipv4 = Mock()
         mock_ipv4.status_code = 200
@@ -270,7 +292,8 @@ class TestEgressInfoModel:
     """Test EgressInfo model integration."""
     
     @patch('network.egress.requests.get')
-    def test_creates_valid_egress_info(self, mock_get):
+    def test_creates_valid_egress_info(self, mock_get: Any) -> None:
+
         """Test that valid EgressInfo object is created."""
         mock_ipv4 = Mock()
         mock_ipv4.status_code = 200
@@ -299,7 +322,8 @@ class TestEgressInfoModel:
         assert hasattr(result, 'country')
     
     @patch('network.egress.requests.get')
-    def test_creates_error_egress_info(self, mock_get):
+    def test_creates_error_egress_info(self, mock_get: Any) -> None:
+
         """Test that error EgressInfo is created on failure."""
         mock_get.side_effect = requests.exceptions.ConnectionError()
         

@@ -7,9 +7,14 @@ test data throughout the test suite.
 
 import pytest
 from pathlib import Path
-from typing import Generator
+from typing import Generator, List
 from unittest.mock import Mock, patch, MagicMock
 import logging
+
+# Type imports for fixtures
+from _pytest.logging import LogCaptureFixture
+from _pytest.config import Config
+from models import InterfaceInfo, EgressInfo
 
 
 # ============================================================================
@@ -17,7 +22,7 @@ import logging
 # ============================================================================
 
 @pytest.fixture
-def disable_logging():
+def disable_logging() -> Generator[None, None, None]:
     """Disable logging during tests to reduce noise."""
     logging.disable(logging.CRITICAL)
     yield
@@ -25,7 +30,7 @@ def disable_logging():
 
 
 @pytest.fixture
-def caplog_debug(caplog):
+def caplog_debug(caplog: LogCaptureFixture) -> LogCaptureFixture:
     """Capture DEBUG level logs in tests."""
     caplog.set_level(logging.DEBUG)
     return caplog
@@ -171,7 +176,7 @@ def mock_sysfs_loopback(mock_sysfs_base: Path) -> Path:
 # ============================================================================
 
 @pytest.fixture
-def mock_ip_link_output():
+def mock_ip_link_output() -> str:
     """Sample output from 'ip -o link show' command."""
     return """1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
 2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
@@ -179,7 +184,7 @@ def mock_ip_link_output():
 
 
 @pytest.fixture
-def mock_ip_addr_ipv4_output():
+def mock_ip_addr_ipv4_output() -> str:
     """Sample output from 'ip -4 addr show eth0' command."""
     return """2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
     link/ether 00:11:22:33:44:55 brd ff:ff:ff:ff:ff:ff
@@ -188,7 +193,7 @@ def mock_ip_addr_ipv4_output():
 
 
 @pytest.fixture
-def mock_ip_addr_ipv6_output():
+def mock_ip_addr_ipv6_output() -> str:
     """Sample output from 'ip -6 addr show eth0' command."""
     return """2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
     inet6 2001:db8::1/64 scope global dynamic
@@ -198,26 +203,26 @@ def mock_ip_addr_ipv6_output():
 
 
 @pytest.fixture
-def mock_ip_route_output():
+def mock_ip_route_output() -> str:
     """Sample output from 'ip route show dev eth0' command."""
     return """default via 192.168.1.1 proto dhcp src 192.168.1.100 metric 100
 192.168.1.0/24 proto kernel scope link src 192.168.1.100 metric 100"""
 
 
 @pytest.fixture
-def mock_lspci_output():
+def mock_lspci_output() -> str:
     """Sample output from 'lspci -d vendor:device' command."""
     return "00:1f.6 Ethernet controller: Intel Corporation Ethernet Connection (2) I219-V"
 
 
 @pytest.fixture
-def mock_lsusb_output():
+def mock_lsusb_output() -> str:
     """Sample output from 'lsusb -d vendor:product' command."""
     return "Bus 003 Device 005: ID 18d1:4eeb Google Inc. Pixel 9a"
 
 
 @pytest.fixture
-def mock_resolvectl_output():
+def mock_resolvectl_output() -> str:
     """Sample output from 'resolvectl status eth0' command."""
     return """Link 2 (eth0)
     Current Scopes: DNS
@@ -234,7 +239,7 @@ MulticastDNS setting: no
 
 
 @pytest.fixture
-def mock_ss_output():
+def mock_ss_output() -> str:
     """Sample output from 'ss -tun' command showing DNS connections."""
     return """Netid State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
 udp   ESTAB  0      0      192.168.1.100:54321 8.8.8.8:53
@@ -291,15 +296,13 @@ def mock_subprocess_run() -> Generator[Mock, None, None]:
 # ============================================================================
 
 @pytest.fixture
-def sample_interface_info():
+def sample_interface_info() -> InterfaceInfo:
     """
     Create a sample InterfaceInfo object for testing.
     
     Returns:
         InterfaceInfo with realistic sample data
     """
-    from models import InterfaceInfo
-    
     return InterfaceInfo(
         name="eth0",
         interface_type="ethernet",
@@ -319,15 +322,13 @@ def sample_interface_info():
 
 
 @pytest.fixture
-def sample_vpn_interface_info():
+def sample_vpn_interface_info() -> InterfaceInfo:
     """
     Create a sample VPN InterfaceInfo object.
     
     Returns:
         InterfaceInfo for a VPN interface
     """
-    from models import InterfaceInfo
-    
     return InterfaceInfo(
         name="tun0",
         interface_type="vpn",
@@ -347,15 +348,13 @@ def sample_vpn_interface_info():
 
 
 @pytest.fixture
-def sample_egress_info():
+def sample_egress_info() -> EgressInfo:
     """
     Create a sample EgressInfo object.
     
     Returns:
         EgressInfo with realistic data
     """
-    from models import EgressInfo
-    
     return EgressInfo(
         external_ip="1.2.3.4",
         external_ipv6="2001:db8:100::1",
@@ -365,15 +364,13 @@ def sample_egress_info():
 
 
 @pytest.fixture
-def sample_interface_list():
+def sample_interface_list() -> List[InterfaceInfo]:
     """
     Create a list of sample InterfaceInfo objects.
     
     Returns:
         List of InterfaceInfo objects representing typical system
     """
-    from models import InterfaceInfo
-    
     return [
         InterfaceInfo.create_empty("lo"),
         InterfaceInfo(
@@ -415,7 +412,7 @@ def sample_interface_list():
 # Pytest Configuration
 # ============================================================================
 
-def pytest_configure(config):
+def pytest_configure(config: Config) -> None:
     """Configure pytest with custom markers."""
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"

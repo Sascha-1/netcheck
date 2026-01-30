@@ -4,6 +4,17 @@ Tests for enumeration types.
 Verifies that enums provide correct values and string conversions.
 """
 
+from models import InterfaceInfo, EgressInfo
+
+from typing import Any, Dict, List, Optional, Generator
+from pathlib import Path
+from unittest.mock import MagicMock
+from _pytest.logging import LogCaptureFixture
+from _pytest.capture import CaptureFixture
+from _pytest.config import Config
+from _pytest.monkeypatch import MonkeyPatch
+
+
 import pytest
 from enums import InterfaceType, DnsLeakStatus, DataMarker
 
@@ -11,19 +22,22 @@ from enums import InterfaceType, DnsLeakStatus, DataMarker
 class TestInterfaceType:
     """Test InterfaceType enum."""
     
-    def test_values(self):
+    def test_values(self) -> None:
+
         """Test that enum values are correct."""
         assert InterfaceType.LOOPBACK.value == "loopback"
         assert InterfaceType.ETHERNET.value == "ethernet"
         assert InterfaceType.WIRELESS.value == "wireless"
         assert InterfaceType.VPN.value == "vpn"
     
-    def test_string_conversion(self):
+    def test_string_conversion(self) -> None:
+
         """Test that enum converts to string correctly."""
         assert str(InterfaceType.ETHERNET) == "ethernet"
         assert str(InterfaceType.VPN) == "vpn"
     
-    def test_all_types_present(self):
+    def test_all_types_present(self) -> None:
+
         """Test that all expected types are defined."""
         expected = {
             "loopback", "ethernet", "wireless", "vpn",
@@ -36,14 +50,16 @@ class TestInterfaceType:
 class TestDnsLeakStatus:
     """Test DnsLeakStatus enum."""
     
-    def test_values(self):
+    def test_values(self) -> None:
+
         """Test that status values are correct."""
         assert DnsLeakStatus.OK.value == "OK"
         assert DnsLeakStatus.LEAK.value == "LEAK"
         assert DnsLeakStatus.WARN.value == "WARN"
         assert DnsLeakStatus.NOT_APPLICABLE.value == "--"
     
-    def test_string_conversion(self):
+    def test_string_conversion(self) -> None:
+
         """Test string conversion."""
         assert str(DnsLeakStatus.OK) == "OK"
         assert str(DnsLeakStatus.LEAK) == "LEAK"
@@ -52,7 +68,8 @@ class TestDnsLeakStatus:
 class TestDataMarker:
     """Test DataMarker enum."""
     
-    def test_values(self):
+    def test_values(self) -> None:
+
         """Test marker values."""
         assert DataMarker.NOT_APPLICABLE.value == "--"
         assert DataMarker.NOT_AVAILABLE.value == "N/A"
@@ -60,7 +77,8 @@ class TestDataMarker:
         assert DataMarker.DEFAULT.value == "DEFAULT"
         assert DataMarker.ERROR.value == "ERR"
     
-    def test_string_conversion(self):
+    def test_string_conversion(self) -> None:
+
         """Test string conversion."""
         assert str(DataMarker.NOT_AVAILABLE) == "N/A"
         assert str(DataMarker.ERROR) == "ERR"
