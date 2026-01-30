@@ -6,15 +6,7 @@
 
 A comprehensive network interface analysis tool for GNU/Linux
 
-## 🎯 Key Features
-
-### 🔒 DNS Leak Detection
-- **Deterministic, configuration-based detection** - No timing dependencies
-- Real-time monitoring of DNS traffic
-- Detects when DNS queries leak to ISP while VPN is active
-- Recognizes major public DNS providers (Cloudflare, Google, Quad9)
-- Color-coded visual feedback (green = secure, red = leak detected)
-- No root privileges required
+## 🗝️ Key Features
 
 ### 🌐 Comprehensive Network Info
 - All network interfaces (Ethernet, Wi-Fi, VPN, USB tethering)
@@ -30,6 +22,14 @@ A comprehensive network interface analysis tool for GNU/Linux
 - Kernel-direct queries (sysfs, netlink)
 - No heuristics or assumptions
 - Works reliably on modern systems (kernel 6.12+, hardware 2015+)
+
+### 🔒 DNS Leak Detection
+- **Deterministic, configuration-based detection** - No timing dependencies
+- Real-time monitoring of DNS traffic
+- Detects when DNS queries leak to ISP while VPN is active
+- Recognizes major public DNS providers (Cloudflare, Google, Quad9)
+- Color-coded visual feedback (green = secure, red = leak detected)
+- No root privileges required
 
 ### 📊 Clear Presentation
 - Color-coded table output
@@ -448,17 +448,6 @@ Contributions welcome! Please:
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
-## Version History
-
-- **1.0** (2026-01-28) - Production release
-  - Deterministic DNS leak detection (configuration-based)
-  - Full IPv6 support (dual-stack egress queries)
-  - VPN underlay detection
-  - Public DNS recognition (Cloudflare, Google, Quad9)
-  - Comprehensive test suite (171 tests)
-  - Professional logging throughout
-  - Modern Python 3.12+ features
-
 ## Author
 
 Sascha
@@ -471,6 +460,4 @@ Sascha
 
 ---
 
-**Star this repo if you find it useful!** ⭐
 
-**Privacy matters. Verify your VPN is working.** 🔒
