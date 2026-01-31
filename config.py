@@ -187,14 +187,14 @@ TABLE_COLUMNS = [
     ("TYPE", 10),           # Interface type (ethernet, wireless, vpn, etc.)
     ("DEVICE", 20),         # Hardware device name
     ("INTERNAL_IPv4", 15),  # Local IPv4 address
-    ("INTERNAL_IPv6", 20),  # Local IPv6 address (global scope)
-    ("DNS_SERVER", 18),     # Current DNS server (color-coded for leak status)
+    ("INTERNAL_IPv6", 25),  # Local IPv6 address (global scope)
+    ("DNS_SERVER", 20),     # Current DNS server (color-coded for leak status)
     ("EXTERNAL_IPv4", 15),  # Public IPv4 address (active route only)
-    ("EXTERNAL_IPv6", 20),  # Public IPv6 address (active route only)
-    ("ISP", 20),            # ISP name (active route only)
-    ("COUNTRY", 7),         # Country code (active route only)
+    ("EXTERNAL_IPv6", 25),  # Public IPv6 address (active route only)
+    ("ISP", 15),            # ISP name (active route only)
+    ("COUNTRY", 10),         # Country code (active route only)
     ("GATEWAY", 15),        # Default gateway IP
-    ("METRIC", 6),          # Route metric (lower = higher priority)
+    ("METRIC", 10),          # Route metric (lower = higher priority)
 ]
 
 # ANSI color codes for terminal output
