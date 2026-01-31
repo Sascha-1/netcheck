@@ -9,7 +9,7 @@ A comprehensive network interface analysis tool for GNU/Linux
 ## 🗝️ Key Features
 
 ### 🌐 Comprehensive Network Info
-- All network interfaces (Ethernet, Wi-Fi, VPN, USB tethering)
+- All network interfaces (Ethernet, Wi-Fi, USB tethering, VPN)
 - IPv4 and IPv6 addresses
 - Dual-stack IPv6 support (queries both IPv4 and IPv6 egress)
 - DNS configuration per interface
@@ -61,7 +61,6 @@ pip install -r requirements.txt
 **System:**
 - OS: GNU/Linux (kernel 6.12+)
 - Python: 3.12+
-- DNS: systemd-resolved
 
 **Commands Required:**
 - `ip` - Network interface queries
@@ -179,7 +178,7 @@ Even with a VPN encrypting your traffic:
 | Column | Description | Data Source |
 |--------|-------------|-------------|
 | **INTERFACE** | Interface name (eth0, wlp8s0, tun0, etc.) | Kernel via `ip` |
-| **TYPE** | Classification (ethernet, wireless, vpn, tether) | sysfs + kernel |
+| **TYPE** | Classification (ethernet, wireless, tether, vpn) | sysfs + kernel |
 | **DEVICE** | Hardware device name (e.g., Intel I219-V) | lspci/lsusb |
 | **INTERNAL_IPv4** | Local IPv4 address | Kernel routing |
 | **INTERNAL_IPv6** | Global IPv6 address | Kernel routing |
@@ -458,6 +457,5 @@ Sascha
 - **Issues:** https://github.com/Sascha-1/netcheck/issues
 - **Documentation:** https://github.com/Sascha-1/netcheck/blob/main/README.md
 
----
 
 
