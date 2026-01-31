@@ -180,15 +180,15 @@ TIMEOUT_SECONDS = 10
 # ============================================================================
 
 # Table column definitions: (column_name, width_in_characters)
-# Total width optimized for typical terminal (185 characters)
+# Total width optimized for typical terminal
+# DNS_LEAK column removed - status shown via color coding on DNS_SERVER
 TABLE_COLUMNS = [
     ("INTERFACE", 15),      # Interface name (eth0, wlan0, tun0, etc.)
     ("TYPE", 10),           # Interface type (ethernet, wireless, vpn, etc.)
     ("DEVICE", 20),         # Hardware device name
     ("INTERNAL_IPv4", 15),  # Local IPv4 address
     ("INTERNAL_IPv6", 20),  # Local IPv6 address (global scope)
-    ("DNS_SERVER", 18),     # Current DNS server
-    ("DNS_LEAK", 8),        # Leak status (OK, LEAK, WARN, --)
+    ("DNS_SERVER", 18),     # Current DNS server (color-coded for leak status)
     ("EXTERNAL_IPv4", 15),  # Public IPv4 address (active route only)
     ("EXTERNAL_IPv6", 20),  # Public IPv6 address (active route only)
     ("ISP", 20),            # ISP name (active route only)
@@ -204,13 +204,19 @@ class Colors:
     
     Color scheme:
         GREEN: VPN tunnel endpoint (encrypted, secure)
+               Also used for DNS_SERVER when status is OK
         CYAN: Physical interface carrying VPN traffic (underlay)
         RED: Direct internet connection (unencrypted, potentially exposed)
         YELLOW: DNS leak detected or warning condition
+                Also used for DNS_SERVER when leak detected
         RESET: Reset to terminal default colors
     """
-    GREEN = '\033[92m'      # VPN tunnel endpoint (encrypted)
+    GREEN = '\033[92m'      # VPN tunnel endpoint (encrypted) / DNS OK
     CYAN = '\033[96m'       # Physical interface carrying VPN (underlay)
     RED = '\033[91m'        # Direct internet (unencrypted)
     YELLOW = '\033[93m'     # DNS leak or warning
     RESET = '\033[0m'       # Reset to default
+
+
+# Column separator for table output (3 spaces for readability)
+COLUMN_SEPARATOR = "   "

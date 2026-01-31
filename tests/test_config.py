@@ -311,9 +311,10 @@ class TestTableColumns:
         """Test that expected columns are present."""
         column_names = [col[0] for col in TABLE_COLUMNS]
         
+        # Updated: Removed DNS_LEAK - status shown by row color instead
         expected = [
             "INTERFACE", "TYPE", "DEVICE", "INTERNAL_IPv4", "INTERNAL_IPv6",
-            "DNS_SERVER", "DNS_LEAK", "EXTERNAL_IPv4", "EXTERNAL_IPv6",
+            "DNS_SERVER", "EXTERNAL_IPv4", "EXTERNAL_IPv6",
             "ISP", "COUNTRY", "GATEWAY", "METRIC"
         ]
         

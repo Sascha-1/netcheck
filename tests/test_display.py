@@ -285,7 +285,7 @@ class TestFormatOutput:
         assert "OK" in captured.out
 
     def test_dns_leak_status_leak(self, capsys: CaptureFixture[str]) -> None:
-        """Test display of LEAK status."""
+        """Test display of LEAK status - shown by YELLOW row color."""
         from display import format_output
         
         interface = InterfaceInfo(
@@ -310,7 +310,10 @@ class TestFormatOutput:
         format_output([interface])
         
         captured = capsys.readouterr()
-        assert "LEAK" in captured.out
+        # DNS leak status shown by YELLOW color on the row
+        assert "\033[93m" in captured.out  # YELLOW color code
+        assert "eth0" in captured.out
+
 
     def test_data_marker_display(self, capsys: CaptureFixture[str]) -> None:
         """Test display of DataMarker values."""
@@ -374,7 +377,9 @@ class TestComplexScenarios:
         format_output(interfaces)
         
         captured = capsys.readouterr()
-        assert "LEAK" in captured.out
+        # Check for both YELLOW (leak) and GREEN (VPN with OK DNS) colors
+        assert "\033[93m" in captured.out  # YELLOW for DNS leak
+        assert "\033[92m" in captured.out  # GREEN for VPN with OK DNS
         assert "OK" in captured.out
 
     def test_dual_stack_scenario(self, capsys: CaptureFixture[str]) -> None:

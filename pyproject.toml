@@ -52,6 +52,7 @@ omit = [
     "*/env/*",
     "*/.venv/*",
     "cleanup.sh",
+    "cleanup.py",
 ]
 branch = true
 
@@ -77,6 +78,8 @@ directory = "htmlcov"
 
 [tool.mypy]
 python_version = "3.12"
+
+# Strict mode - enforced everywhere, no overrides
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -97,6 +100,20 @@ show_error_codes = true
 show_error_context = true
 pretty = true
 
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_decorators = false
+# Scan everything recursively (like pytest does)
+# Just specify "." to scan all .py files in the project
+# This is simpler than listing every file individually
+files = ["."]
+
+# Exclude patterns for files/directories to skip
+exclude = [
+    "^build/",
+    "^dist/",
+    "^\\.venv/",
+    "^venv/",
+    "^env/",
+    "^\\.mypy_cache/",
+    "^\\.pytest_cache/",
+]
+
+# No per-module overrides - strict rules apply everywhere
