@@ -44,6 +44,21 @@ USB_TETHER_DRIVERS = [
 ]
 
 # ============================================================================
+# VPN Detection Configuration
+# ============================================================================
+
+# Common VPN protocol ports for connection detection
+# Used to identify VPN server endpoints when analyzing network connections
+COMMON_VPN_PORTS = {
+    51820: "WireGuard",                    # WireGuard VPN
+    1194: "OpenVPN (UDP default)",        # OpenVPN standard UDP port
+    1195: "OpenVPN (TCP alternate)",      # OpenVPN alternate port
+    443: "HTTPS/OpenVPN/SSTP",            # HTTPS (used by many VPNs)
+    500: "IKEv2/IPSec",                   # Internet Key Exchange v2
+    4500: "IKEv2/IPSec NAT-T",           # IPSec NAT Traversal
+}
+
+# ============================================================================
 # DNS Configuration
 # ============================================================================
 
@@ -174,6 +189,21 @@ DEVICE_NAME_CLEANUP = [
 
 # Timeout for external commands (seconds)
 TIMEOUT_SECONDS = 10
+
+# Retry configuration for API calls (Fix #5)
+RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_FACTOR = 1.0  # Delays: 1s, 2s, 4s
+
+# ============================================================================
+# Performance Configuration
+# ============================================================================
+
+# Maximum number of worker threads for parallel interface processing
+# Set to 4 to balance performance with system resource usage
+MAX_WORKERS = 4
+
+# Cache size for LRU caches (device name cleanup, IP validation)
+CACHE_SIZE = 128
 
 # ============================================================================
 # Display Configuration

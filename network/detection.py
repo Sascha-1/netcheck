@@ -7,6 +7,8 @@ DESIGN PRINCIPLE: Consistent deterministic querying
 - PCI devices: Read vendor:device from sysfs → Query lspci database
 - USB devices: Read vendor:product from sysfs → Query lsusb database
 - Return raw data from databases - cleaning happens at display time
+
+SECURITY: All interface names validated before use in commands
 """
 
 import sys
@@ -15,7 +17,7 @@ from functools import cached_property
 from dataclasses import dataclass
 
 from logging_config import get_logger
-from utils.system import run_command
+from utils.system import run_command, validate_interface_name, sanitize_for_log
 from config import INTERFACE_TYPE_PATTERNS, USB_TETHER_DRIVERS
 from enums import InterfaceType, DataMarker
 
@@ -29,8 +31,15 @@ class SysfsInterface:
     
     Provides cached properties for expensive filesystem operations.
     All hardware ID queries use consistent pattern: read from sysfs, query database.
+    
+    Security: Interface name validated on construction.
     """
     name: str
+    
+    def __post_init__(self) -> None:
+        """Validate interface name on construction."""
+        if not validate_interface_name(self.name):
+            raise ValueError(f"Invalid interface name: {self.name}")
     
     @cached_property
     def base_path(self) -> Path:
@@ -90,7 +99,7 @@ class SysfsInterface:
             device_id = device_file.read_text().strip().replace('0x', '')
             return (vendor_id, device_id)
         except Exception as e:
-            logger.warning(f"Failed to read PCI IDs for {self.name}: {e}")
+            logger.warning(f"Failed to read PCI IDs for {sanitize_for_log(self.name)}: {e}")
             return None
     
     @cached_property
@@ -116,7 +125,7 @@ class SysfsInterface:
                     product_id = product_file.read_text().strip()
                     return (vendor_id, product_id)
                 except Exception as e:
-                    logger.warning(f"Failed to read USB IDs for {self.name}: {e}")
+                    logger.warning(f"Failed to read USB IDs for {sanitize_for_log(self.name)}: {e}")
                     break
             
             current_path = current_path.parent
@@ -128,19 +137,28 @@ def get_interface_list() -> list[str]:
     """
     Get list of all network interfaces from kernel.
     
+    Security: Validates all interface names before returning.
+    
     Returns:
-        List of interface names
+        List of valid interface names
     """
     logger.debug("Querying network interfaces via 'ip -o link show'")
     
-    if not (output := run_command(["ip", "-o", "link", "show"])):
+    output = run_command(["ip", "-o", "link", "show"])
+    if not output:
         logger.warning("Failed to get interface list from 'ip' command")
         return []
     
     interfaces = []
     for line in output.split("\n"):
         if line and len(parts := line.split(":", 2)) >= 2:
-            interfaces.append(parts[1].strip())
+            iface = parts[1].strip()
+            
+            # SECURITY: Validate interface name before adding
+            if validate_interface_name(iface):
+                interfaces.append(iface)
+            else:
+                logger.warning(f"Ignoring invalid interface name: {sanitize_for_log(iface)}")
     
     logger.debug(f"Found {len(interfaces)} interfaces: {', '.join(interfaces)}")
     return interfaces
@@ -163,16 +181,16 @@ def is_usb_tethered_device(sysfs: SysfsInterface, verbose: bool = False) -> bool
     if not sysfs.is_usb:
         return False
     
-    logger.debug(f"[{sysfs.name}] Device is on USB bus")
+    logger.debug(f"[{sanitize_for_log(sysfs.name)}] Device is on USB bus")
     
     if driver := sysfs.usb_driver:
-        logger.debug(f"[{sysfs.name}] USB driver: {driver}")
+        logger.debug(f"[{sanitize_for_log(sysfs.name)}] USB driver: {sanitize_for_log(driver)}")
         
         if driver in USB_TETHER_DRIVERS:
-            logger.debug(f"[{sysfs.name}] Matched tethering driver: {driver}")
+            logger.debug(f"[{sanitize_for_log(sysfs.name)}] Matched tethering driver: {sanitize_for_log(driver)}")
             return True
         
-        logger.debug(f"[{sysfs.name}] Driver '{driver}' is not a tethering driver")
+        logger.debug(f"[{sanitize_for_log(sysfs.name)}] Driver '{sanitize_for_log(driver)}' is not a tethering driver")
     
     return False
 
@@ -190,55 +208,67 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> str:
     6. Name prefix patterns
     
     Args:
-        iface_name: Interface name
+        iface_name: Interface name (must be validated)
         verbose: If True, use debug logging (legacy parameter)
     
     Returns:
         Interface type string (InterfaceType enum value)
+    
+    Security:
+        Assumes iface_name is already validated by get_interface_list()
     """
+    safe_name = sanitize_for_log(iface_name)
+    
     if iface_name == "lo":
-        logger.debug(f"[{iface_name}] Detected as loopback")
+        logger.debug(f"[{safe_name}] Detected as loopback")
         return str(InterfaceType.LOOPBACK)
     
-    sysfs = SysfsInterface(iface_name)
+    try:
+        sysfs = SysfsInterface(iface_name)
+    except ValueError as e:
+        logger.error(f"Invalid interface name in detect_interface_type: {e}")
+        return str(InterfaceType.UNKNOWN)
     
     if is_usb_tethered_device(sysfs, verbose):
-        logger.debug(f"[{iface_name}] Detected as tether (USB)")
+        logger.debug(f"[{safe_name}] Detected as tether (USB)")
         return str(InterfaceType.TETHER)
     
     if "vpn" in iface_name.lower():
-        logger.debug(f"[{iface_name}] Detected as VPN (keyword in name)")
+        logger.debug(f"[{safe_name}] Detected as VPN (keyword in name)")
         return str(InterfaceType.VPN)
     
     if sysfs.is_wireless:
-        logger.debug(f"[{iface_name}] Detected as wireless (phy80211 present)")
+        logger.debug(f"[{safe_name}] Detected as wireless (phy80211 present)")
         return str(InterfaceType.WIRELESS)
     
-    if output := run_command(["ip", "-d", "link", "show", iface_name]):
+    # Query kernel for link type
+    output = run_command(["ip", "-d", "link", "show", iface_name])
+    if output:
         output_lower = output.lower()
         
         if "wireguard" in output_lower:
-            logger.debug(f"[{iface_name}] Detected as VPN (WireGuard)")
+            logger.debug(f"[{safe_name}] Detected as VPN (WireGuard)")
             return str(InterfaceType.VPN)
         
         if "tun" in output_lower or "tap" in output_lower:
-            logger.debug(f"[{iface_name}] Detected as VPN (TUN/TAP)")
+            logger.debug(f"[{safe_name}] Detected as VPN (TUN/TAP)")
             return str(InterfaceType.VPN)
         
         if "veth" in output_lower:
-            logger.debug(f"[{iface_name}] Detected as virtual (veth)")
+            logger.debug(f"[{safe_name}] Detected as virtual (veth)")
             return str(InterfaceType.VIRTUAL)
         
         if "bridge" in output_lower:
-            logger.debug(f"[{iface_name}] Detected as bridge")
+            logger.debug(f"[{safe_name}] Detected as bridge")
             return str(InterfaceType.BRIDGE)
     
+    # Check systemd naming patterns
     for prefix, iface_type in INTERFACE_TYPE_PATTERNS.items():
         if iface_name.startswith(prefix):
-            logger.debug(f"[{iface_name}] Detected as {iface_type} (systemd prefix '{prefix}')")
+            logger.debug(f"[{safe_name}] Detected as {iface_type} (systemd prefix '{prefix}')")
             return iface_type
     
-    logger.warning(f"[{iface_name}] Type unknown (no detection method matched)")
+    logger.warning(f"[{safe_name}] Type unknown (no detection method matched)")
     return str(InterfaceType.UNKNOWN)
 
 
@@ -257,29 +287,37 @@ def get_pci_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
         
     Returns:
         Raw device name or None
+        
+    Security:
+        Uses validated hardware IDs, not interface name directly in command
     """
+    safe_name = sanitize_for_log(sysfs.name)
+    
     if not (pci_ids := sysfs.pci_ids):
-        logger.debug(f"[{sysfs.name}] No PCI IDs found")
+        logger.debug(f"[{safe_name}] No PCI IDs found")
         return None
     
     vendor_id, device_id = pci_ids
     
-    logger.debug(f"[{sysfs.name}] PCI ID: {vendor_id}:{device_id}")
+    logger.debug(f"[{safe_name}] PCI ID: {vendor_id}:{device_id}")
     
-    if not (lspci_output := run_command(["lspci", "-d", f"{vendor_id}:{device_id}"])):
-        logger.error(f"lspci query failed for {sysfs.name} ({vendor_id}:{device_id})")
+    # SECURITY: Using hardware IDs, not interface name in command
+    lspci_output = run_command(["lspci", "-d", f"{vendor_id}:{device_id}"])
+    if not lspci_output:
+        logger.error(f"lspci query failed for {safe_name} ({vendor_id}:{device_id})")
         return None
     
-    if not (lines := lspci_output.strip().split('\n')):
-        logger.warning(f"Empty lspci output for {sysfs.name}")
+    lines = lspci_output.strip().split('\n')
+    if not lines:
+        logger.warning(f"Empty lspci output for {safe_name}")
         return None
     
     if len(parts := lines[0].split(':', 2)) >= 3:
         device_name = parts[2].strip()
-        logger.debug(f"[{sysfs.name}] Device: {device_name}")
+        logger.debug(f"[{safe_name}] Device: {sanitize_for_log(device_name)}")
         return device_name
     
-    logger.warning(f"Failed to parse lspci output for {sysfs.name}")
+    logger.warning(f"Failed to parse lspci output for {safe_name}")
     return None
 
 
@@ -298,33 +336,41 @@ def get_usb_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
         
     Returns:
         Raw device name or None
+        
+    Security:
+        Uses validated hardware IDs, not interface name directly in command
     """
+    safe_name = sanitize_for_log(sysfs.name)
+    
     if not sysfs.is_usb:
         return None
     
-    logger.debug(f"[{sysfs.name}] USB device detected, querying lsusb...")
+    logger.debug(f"[{safe_name}] USB device detected, querying lsusb...")
     
     if not (usb_ids := sysfs.usb_ids):
-        logger.error(f"Could not read USB IDs from sysfs for {sysfs.name}")
+        logger.error(f"Could not read USB IDs from sysfs for {safe_name}")
         return None
     
     vendor_id, product_id = usb_ids
     
-    logger.debug(f"[{sysfs.name}] USB ID: {vendor_id}:{product_id}")
+    logger.debug(f"[{safe_name}] USB ID: {vendor_id}:{product_id}")
     
-    if not (lsusb_output := run_command(["lsusb", "-d", f"{vendor_id}:{product_id}"])):
-        logger.error(f"lsusb query failed for {sysfs.name} ({vendor_id}:{product_id})")
+    # SECURITY: Using hardware IDs, not interface name in command
+    lsusb_output = run_command(["lsusb", "-d", f"{vendor_id}:{product_id}"])
+    if not lsusb_output:
+        logger.error(f"lsusb query failed for {safe_name} ({vendor_id}:{product_id})")
         return None
     
-    if not (lines := lsusb_output.strip().split('\n')):
-        logger.warning(f"Empty lsusb output for {sysfs.name}")
+    lines = lsusb_output.strip().split('\n')
+    if not lines:
+        logger.warning(f"Empty lsusb output for {safe_name}")
         return None
     
     # Parse format: "Bus 005 Device 013: ID 18d1:4eeb Google Inc. Pixel 9a"
     line = lines[0]
     
     if "ID " not in line:
-        logger.error(f"Unexpected lsusb format for {sysfs.name}")
+        logger.error(f"Unexpected lsusb format for {safe_name}")
         return None
     
     # Split on "ID " and take the second part
@@ -335,11 +381,11 @@ def get_usb_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
     parts = id_part.split(None, 1)
     
     if len(parts) < 2:
-        logger.error(f"No device name in lsusb output for {sysfs.name}")
+        logger.error(f"No device name in lsusb output for {safe_name}")
         return None
     
     device_name = parts[1]
-    logger.debug(f"[{sysfs.name}] Device: {device_name}")
+    logger.debug(f"[{safe_name}] Device: {sanitize_for_log(device_name)}")
     return device_name
 
 
@@ -355,41 +401,55 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
     All names returned raw - cleaning at display time.
     
     Args:
-        iface_name: Interface name
+        iface_name: Interface name (must be validated)
         iface_type: Interface type (InterfaceType enum value)
         verbose: If True, use debug logging (legacy parameter)
         
     Returns:
         Raw device name or DataMarker.NOT_AVAILABLE
+        
+    Security:
+        Assumes iface_name is already validated
     """
+    safe_name = sanitize_for_log(iface_name)
+    
     match iface_type:
         case str(InterfaceType.LOOPBACK) | InterfaceType.LOOPBACK.value:
             return str(DataMarker.NOT_AVAILABLE)
         
         case str(InterfaceType.VPN) | InterfaceType.VPN.value:
-            sysfs = SysfsInterface(iface_name)
+            try:
+                sysfs = SysfsInterface(iface_name)
+            except ValueError:
+                return str(DataMarker.NOT_AVAILABLE)
             
             if sysfs.device_path:
                 # Rare: hardware VPN accelerator
                 if device_name := get_pci_device_name(sysfs, verbose):
-                    logger.debug(f"[{iface_name}] VPN has hardware device: {device_name}")
+                    logger.debug(f"[{safe_name}] VPN has hardware device: {sanitize_for_log(device_name)}")
                     return device_name
             else:
                 # Normal: virtual VPN interface
-                logger.debug(f"[{iface_name}] Virtual VPN interface")
-                if output := run_command(["ip", "-d", "link", "show", iface_name]):
-                    if "wireguard" in output.lower():
-                        logger.debug(f"[{iface_name}] VPN protocol: WireGuard")
-                    else:
-                        logger.debug(f"[{iface_name}] VPN protocol: Generic")
+                logger.debug(f"[{safe_name}] Virtual VPN interface")
+                output = run_command(["ip", "-d", "link", "show", iface_name])
+                if output and "wireguard" in output.lower():
+                    logger.debug(f"[{safe_name}] VPN protocol: WireGuard")
+                else:
+                    logger.debug(f"[{safe_name}] VPN protocol: Generic")
             
             return str(DataMarker.NOT_AVAILABLE)
         
         case str(InterfaceType.TETHER) | InterfaceType.TETHER.value:
-            sysfs = SysfsInterface(iface_name)
-            return get_usb_device_name(sysfs, verbose) or "USB Tethered Device"
+            try:
+                sysfs = SysfsInterface(iface_name)
+                return get_usb_device_name(sysfs, verbose) or "USB Tethered Device"
+            except ValueError:
+                return "USB Tethered Device"
         
         case _:
             # Physical PCI/PCIe devices
-            sysfs = SysfsInterface(iface_name)
-            return get_pci_device_name(sysfs, verbose) or str(DataMarker.NOT_AVAILABLE)
+            try:
+                sysfs = SysfsInterface(iface_name)
+                return get_pci_device_name(sysfs, verbose) or str(DataMarker.NOT_AVAILABLE)
+            except ValueError:
+                return str(DataMarker.NOT_AVAILABLE)

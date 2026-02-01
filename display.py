@@ -4,20 +4,37 @@ Display and formatting module.
 Handles all output formatting and text manipulation for terminal display.
 Combines table output and text formatting utilities.
 All data cleaning happens here at display time.
+
+IMPROVEMENTS:
+- Compiled regex patterns (avoid recompilation)
+- LRU caching for device name cleanup
+- Better performance on large interface lists
 """
 
 import re
 from typing import List, Dict, Tuple
+from functools import lru_cache
+
 from models import InterfaceInfo
-from config import TABLE_COLUMNS, DEVICE_NAME_CLEANUP, Colors, COLUMN_SEPARATOR
+from config import TABLE_COLUMNS, DEVICE_NAME_CLEANUP, Colors, COLUMN_SEPARATOR, CACHE_SIZE
 from enums import DataMarker, DnsLeakStatus
 from utils.system import is_valid_ipv6
+
+
+# ============================================================================
+# Compiled Regex Patterns (Performance Optimization)
+# ============================================================================
+
+# Compile regexes once at module load time
+PARENTHESES_PATTERN = re.compile(r'\([^)]*\)')
+BRACKETS_PATTERN = re.compile(r'\[[^\]]*\]')
 
 
 # ============================================================================
 # Text Formatting Functions
 # ============================================================================
 
+@lru_cache(maxsize=CACHE_SIZE)
 def cleanup_device_name(device_name: str) -> str:
     """
     Clean device name by removing generic terms and technical jargon.
@@ -31,17 +48,25 @@ def cleanup_device_name(device_name: str) -> str:
     All removals are case-insensitive. Terms are processed longest-first
     to prevent partial matches (e.g., "802.11ax" removed before "802.11a").
     
+    Cached with LRU cache for performance (same device names appear repeatedly).
+    
     Args:
         device_name: Raw device name from lspci or sysfs
         
     Returns:
         Cleaned device name, or original if cleaning produces empty string
+        
+    Examples:
+        >>> cleanup_device_name("Intel Corporation I219-V (Rev 1.0)")
+        'Intel I219-V'
+        >>> cleanup_device_name("MEDIATEK Corp. MT7922 802.11ax Adapter")
+        'MEDIATEK MT7922'
     """
     cleaned = device_name
     
-    # Remove content within parentheses and brackets
-    cleaned = re.sub(r'\([^)]*\)', '', cleaned)
-    cleaned = re.sub(r'\[[^\]]*\]', '', cleaned)
+    # Remove content within parentheses and brackets (using compiled patterns)
+    cleaned = PARENTHESES_PATTERN.sub('', cleaned)
+    cleaned = BRACKETS_PATTERN.sub('', cleaned)
     
     # Sort cleanup terms by length (longest first) to prevent partial matches
     # This ensures "802.11ax" is removed before "802.11a" could match
@@ -63,17 +88,26 @@ def cleanup_device_name(device_name: str) -> str:
     return cleaned if cleaned else device_name
 
 
+@lru_cache(maxsize=CACHE_SIZE)
 def cleanup_isp_name(isp: str) -> str:
     """
     Clean ISP name by removing ASN prefix.
     
     Format is often "AS12345 ISP Name" - we want just the name.
     
+    Cached with LRU cache for performance.
+    
     Args:
         isp: Raw ISP string from API
         
     Returns:
         Cleaned ISP name
+        
+    Examples:
+        >>> cleanup_isp_name("AS12345 Example ISP")
+        'Example ISP'
+        >>> cleanup_isp_name("Example ISP")
+        'Example ISP'
     """
     if isp and isp.startswith("AS") and len(parts := isp.split()) > 1:
         return " ".join(parts[1:])
@@ -92,6 +126,12 @@ def shorten_text(text: str, max_length: int) -> str:
         
     Returns:
         Shortened text, breaking at word boundary when possible
+        
+    Examples:
+        >>> shorten_text("Very Long Device Name", 10)
+        'Very Long'
+        >>> shorten_text("Short", 20)
+        'Short'
     """
     if not text or len(text) <= max_length:
         return text
@@ -112,7 +152,15 @@ def shorten_text(text: str, max_length: int) -> str:
 # ============================================================================
 
 def get_column_width(column_name: str) -> int:
-    """Get the width of a column from TABLE_COLUMNS configuration."""
+    """
+    Get the width of a column from TABLE_COLUMNS configuration.
+    
+    Args:
+        column_name: Name of column to look up
+        
+    Returns:
+        Width in characters, or 20 as default fallback
+    """
     for col_name, col_width in TABLE_COLUMNS:
         if col_name == column_name:
             return col_width

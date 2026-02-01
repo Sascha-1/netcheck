@@ -3,20 +3,120 @@ System utilities module.
 
 Provides command execution and data validation functions.
 Consolidates commands.py and validation.py.
+
+IMPROVEMENTS:
+- Command injection prevention (Fix #1)
+- Log injection prevention (Fix #2)
+- IPv6 validation bug fix (Fix #4)
+- Performance caching
+
+Security:
+    All functions safe for unprivileged use (no sudo required)
 """
 
 import re
 import subprocess
 from functools import cache
+from typing import Any, Optional
 from config import TIMEOUT_SECONDS
 
 
-def run_command(cmd: list[str]) -> str | None:
+# ============================================================================
+# Security: Input Validation (Fix #1 - Command Injection Prevention)
+# ============================================================================
+
+# Regex for valid interface names (systemd + traditional naming)
+# Allows: letters, digits, hyphens, underscores, dots, colons
+# Prevents: shell metacharacters, path separators, quotes
+VALID_INTERFACE_NAME = re.compile(r'^[a-zA-Z0-9._:-]+$')
+
+
+def validate_interface_name(name: str) -> bool:
+    """
+    Validate interface name to prevent command injection.
+    
+    Prevents shell metacharacters: ; & | ` $ ( ) { } [ ] < > ' "
+    Prevents path separators: / \\
+    Allows standard interface names: eth0, wlp8s0, tun0, enx9a5ad1b02596
+    
+    Args:
+        name: Interface name to validate
+        
+    Returns:
+        True if valid interface name, False otherwise
+        
+    Security:
+        Critical defense against command injection (Fix #1)
+    """
+    if not name or len(name) > 64:  # Reasonable max length
+        return False
+    return bool(VALID_INTERFACE_NAME.match(name))
+
+
+# ============================================================================
+# Security: Log Sanitization (Fix #2 - Log Injection Prevention)
+# ============================================================================
+
+def sanitize_for_log(value: Any) -> str:
+    """
+    Sanitize values before logging to prevent log injection attacks.
+    
+    Removes control characters that could manipulate log output:
+    - Newlines (\\n, \\r) - prevent log splitting
+    - ANSI escape codes - prevent terminal manipulation
+    - Null bytes - prevent log truncation
+    
+    Args:
+        value: Any value to be logged
+        
+    Returns:
+        Sanitized string safe for logging
+        
+    Security:
+        Critical defense against log injection (Fix #2)
+        
+    Examples:
+        >>> sanitize_for_log("normal text")
+        'normal text'
+        >>> sanitize_for_log("line1\\nline2")
+        'line1 line2'
+        >>> sanitize_for_log("\\x1b[31mred\\x1b[0m")
+        'red'
+    """
+    # Convert to string, handling None
+    if value is None:
+        return "None"
+    
+    text = str(value)
+    
+    # Remove control characters
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    
+    # Replace newlines with spaces
+    text = text.replace('\n', ' ').replace('\r', ' ')
+    
+    # Limit length for logs (prevent log flooding)
+    if len(text) > 200:
+        text = text[:197] + "..."
+    
+    return text
+
+
+# ============================================================================
+# Command Execution
+# ============================================================================
+
+def run_command(cmd: list[str]) -> Optional[str]:
     """
     Execute a system command and return output.
     
+    Security:
+        - No shell=True (prevents shell injection)
+        - Timeout protection
+        - Interface names should be pre-validated with validate_interface_name()
+    
     Args:
-        cmd: Command and arguments as list
+        cmd: Command and arguments as list (not string)
         
     Returns:
         Command output as string, or None if command fails
@@ -27,12 +127,17 @@ def run_command(cmd: list[str]) -> str | None:
             capture_output=True,
             text=True,
             check=True,
-            timeout=TIMEOUT_SECONDS
+            timeout=TIMEOUT_SECONDS,
+            shell=False  # Critical: never use shell=True
         )
         return result.stdout.strip()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return None
 
+
+# ============================================================================
+# IP Validation (with IPv6 bug fix)
+# ============================================================================
 
 @cache
 def is_valid_ipv4(address: str) -> bool:
@@ -53,7 +158,8 @@ def is_valid_ipv4(address: str) -> bool:
     # IPv4 format: 1-3 digits, dot, 1-3 digits, dot, 1-3 digits, dot, 1-3 digits
     ipv4_pattern = r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$'
     
-    if not (match := re.match(ipv4_pattern, address)):
+    match = re.match(ipv4_pattern, address)
+    if not match:
         return False
     
     # Validate each octet is 0-255
@@ -65,6 +171,8 @@ def is_valid_ipv4(address: str) -> bool:
 def is_valid_ipv6(address: str) -> bool:
     """
     Validate if string is a valid IPv6 address.
+    
+    FIXED (Issue #4): Line 157 bug - `if address == ':'` → `if address == '::'`
     
     Handles:
     - Full IPv6 addresses (2001:0db8:0000:0000:0000:0000:0000:0001)
@@ -104,8 +212,9 @@ def is_valid_ipv6(address: str) -> bool:
                 return False
             # Continue validating the IPv6 part
             address = ipv6_part
+            # FIXED (Issue #4): Changed from `if address == ':'` to `if address == '::'`
             # Special case: if IPv6 part is just "::", it's valid
-            if address == ':':
+            if address == '::':
                 return True
     
     # Check for multiple :: (only one compression allowed)

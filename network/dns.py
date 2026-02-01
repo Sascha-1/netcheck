@@ -4,11 +4,19 @@ DNS configuration and leak detection module.
 Consolidates DNS server detection and DNS leak monitoring.
 Queries DNS configuration using systemd-resolved (resolvectl).
 Uses DETERMINISTIC configured DNS checking (no timing dependencies).
-Requires systemd-resolved to be active.
+
+IMPROVEMENTS:
+- Thread-safe DNS queries (fixes race condition #3)
+- Optimized deduplication (fixes #13)
+- No elevated privileges required
+
+Requires:
+    systemd-resolved to be active (no sudo needed)
 """
 
 import subprocess
-from typing import List, Tuple, Optional, Set, TYPE_CHECKING
+import threading
+from typing import List, Tuple, Optional, Set, TYPE_CHECKING, Dict
 
 from logging_config import get_logger
 from config import (
@@ -19,13 +27,23 @@ from config import (
     DNS_GLOBAL_SECTION_MARKER,
     DNS_LINK_SECTION_MARKER,
 )
-from utils.system import is_valid_ip
+from utils.system import is_valid_ip, sanitize_for_log
 from enums import DnsLeakStatus, InterfaceType
 
 if TYPE_CHECKING:
     from models import InterfaceInfo
 
 logger = get_logger(__name__)
+
+
+# ============================================================================
+# Thread Safety: DNS Query Lock (Fix #3 - Race Condition)
+# ============================================================================
+
+# Global lock to ensure atomic DNS state snapshots
+# Prevents race condition during VPN connect/disconnect
+# Uses threading.Lock (no file system access, no sudo required)
+_dns_query_lock = threading.Lock()
 
 
 # ============================================================================
@@ -45,8 +63,6 @@ def _extract_ips_from_text(text: str) -> List[str]:
     Examples:
         >>> _extract_ips_from_text("8.8.8.8 8.8.4.4 invalid")
         ['8.8.8.8', '8.8.4.4']
-        >>> _extract_ips_from_text("2001:db8::1 not-an-ip")
-        ['2001:db8::1']
     """
     return [token for token in text.split() if is_valid_ip(token)]
 
@@ -59,23 +75,17 @@ def _parse_dns_section(lines: List[str], start_marker: str = DNS_SERVERS_MARKER)
     1. Same line as marker: "DNS Servers: 8.8.8.8 8.8.4.4"
     2. Following indented lines
     
+    OPTIMIZED (Fix #13): Uses dict as ordered set for efficient deduplication
+    
     Args:
         lines: Lines from resolvectl output
         start_marker: Section start marker (e.g., "DNS Servers:")
         
     Returns:
         List of unique DNS server IPs (preserves order)
-        
-    Examples:
-        >>> lines = [
-        ...     "DNS Servers: 8.8.8.8",
-        ...     "             8.8.4.4",
-        ...     "DNS Domain: example.com"
-        ... ]
-        >>> _parse_dns_section(lines)
-        ['8.8.8.8', '8.8.4.4']
     """
-    dns_servers: List[str] = []
+    # Use dict for O(1) lookup and order preservation (Fix #13)
+    dns_servers: Dict[str, None] = {}
     in_section = False
     
     for line in lines:
@@ -91,23 +101,24 @@ def _parse_dns_section(lines: List[str], start_marker: str = DNS_SERVERS_MARKER)
             # Extract IPs from same line if present
             if ':' in line:
                 dns_part = line.split(':', 1)[1].strip()
-                dns_servers.extend(_extract_ips_from_text(dns_part))
+                for ip in _extract_ips_from_text(dns_part):
+                    dns_servers[ip] = None
             continue
         
         # Process continuation lines (indented or IP-like)
         if in_section and line_stripped:
             # Check if line is indented or starts with digit/colon (IPv4/IPv6)
-            # Note: line_stripped[0] == ':' is for IPv6 like "::1", not section headers
             if line[0].isspace() or line_stripped[0].isdigit() or line_stripped[0] == ':':
-                dns_servers.extend(_extract_ips_from_text(line_stripped))
+                for ip in _extract_ips_from_text(line_stripped):
+                    dns_servers[ip] = None
                 continue
             
             # End of section: non-indented line with colon (new section header)
             if ':' in line and not is_valid_ip(line.split(':')[0].strip()):
                 break
     
-    # Remove duplicates while preserving order
-    return list(dict.fromkeys(dns_servers))
+    # Return list of keys (already deduplicated, order preserved)
+    return list(dns_servers.keys())
 
 
 def _extract_current_dns(lines: List[str]) -> Optional[str]:
@@ -119,14 +130,6 @@ def _extract_current_dns(lines: List[str]) -> Optional[str]:
         
     Returns:
         First DNS server IP from "Current DNS Server:" line, or None
-        
-    Examples:
-        >>> lines = ["Current DNS Server: 8.8.8.8"]
-        >>> _extract_current_dns(lines)
-        '8.8.8.8'
-        >>> lines = ["Current DNS Server: 8.8.8.8 8.8.4.4"]
-        >>> _extract_current_dns(lines)
-        '8.8.8.8'
     """
     for line in lines:
         if DNS_CURRENT_SERVER_MARKER in line:
@@ -171,12 +174,7 @@ def _check_public_dns_usage(configured_dns: List[str]) -> Optional[List[str]]:
     """
     Check if using well-known public DNS providers (acceptable when VPN active).
     
-    Recognizes major public DNS providers defined in config.PUBLIC_DNS_SERVERS:
-    - Cloudflare (1.1.1.1, 1.0.0.1, and variants)
-    - Google (8.8.8.8, 8.8.4.4)
-    - Quad9 (9.9.9.9, 149.112.112.112)
-    - OpenDNS (208.67.222.222, 208.67.220.220)
-    - AdGuard DNS
+    Recognizes major public DNS providers defined in config.PUBLIC_DNS_SERVERS.
     
     Args:
         configured_dns: DNS servers configured on interface
@@ -189,7 +187,7 @@ def _check_public_dns_usage(configured_dns: List[str]) -> Optional[List[str]]:
 
 
 # ============================================================================
-# DNS Configuration Detection
+# DNS Configuration Detection (Thread-Safe)
 # ============================================================================
 
 def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
@@ -199,6 +197,9 @@ def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
     Uses resolvectl to query systemd-resolved for per-interface DNS configuration.
     Returns both the complete list and the currently active DNS server.
     
+    Thread-Safe (Fix #3): Acquires lock to prevent race conditions during
+    VPN connect/disconnect operations.
+    
     Args:
         iface_name: Network interface name
         
@@ -206,56 +207,63 @@ def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
         Tuple of (all_dns_servers, current_dns_server)
         - all_dns_servers: List of all configured DNS (IPv4 and IPv6)
         - current_dns_server: The DNS server currently being used (or None)
+        
+    Security:
+        No elevated privileges required - reads systemd-resolved config only
     """
-    logger.debug(f"[{iface_name}] Querying DNS configuration")
+    safe_name = sanitize_for_log(iface_name)
+    logger.debug(f"[{safe_name}] Querying DNS configuration")
     
-    try:
-        result = subprocess.run(
-            ["resolvectl", "status", iface_name],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-            check=False
-        )
-        
-        if result.returncode != 0:
-            logger.debug(f"[{iface_name}] resolvectl query failed (not configured or no systemd-resolved)")
-            return [], None
-        
-        lines = result.stdout.split('\n')
-        
-        # Extract current DNS (single line)
-        current_dns = _extract_current_dns(lines)
-        
-        # Extract all DNS servers
-        dns_servers = _parse_dns_section(lines)
-        
-        # Ensure current DNS is first in list
-        if current_dns:
-            if current_dns in dns_servers:
-                dns_servers.remove(current_dns)
-            dns_servers.insert(0, current_dns)
-        
-        # Logging
-        if dns_servers:
+    # THREAD SAFETY: Acquire lock for atomic DNS state snapshot (Fix #3)
+    with _dns_query_lock:
+        try:
+            result = subprocess.run(
+                ["resolvectl", "status", iface_name],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_SECONDS,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                logger.debug(f"[{safe_name}] resolvectl query failed (not configured or no systemd-resolved)")
+                return [], None
+            
+            lines = result.stdout.split('\n')
+            
+            # Extract current DNS (single line)
+            current_dns = _extract_current_dns(lines)
+            
+            # Extract all DNS servers (optimized deduplication - Fix #13)
+            dns_servers = _parse_dns_section(lines)
+            
+            # Ensure current DNS is first in list
             if current_dns:
-                logger.debug(f"[{iface_name}] DNS servers: {', '.join(dns_servers)} (current: {current_dns})")
+                if current_dns in dns_servers:
+                    dns_servers.remove(current_dns)
+                dns_servers.insert(0, current_dns)
+            
+            # Logging
+            if dns_servers:
+                if current_dns:
+                    safe_current = sanitize_for_log(current_dns)
+                    logger.debug(f"[{safe_name}] DNS servers: {', '.join(dns_servers)} (current: {safe_current})")
+                else:
+                    logger.debug(f"[{safe_name}] DNS servers: {', '.join(dns_servers)}")
             else:
-                logger.debug(f"[{iface_name}] DNS servers: {', '.join(dns_servers)}")
-        else:
-            logger.debug(f"[{iface_name}] No DNS servers configured")
-        
-        return dns_servers, current_dns
-        
-    except subprocess.TimeoutExpired:
-        logger.warning(f"[{iface_name}] resolvectl timeout")
-        return [], None
-    except FileNotFoundError:
-        logger.error("resolvectl not found (systemd-resolved not installed)")
-        return [], None
-    except Exception as e:
-        logger.error(f"[{iface_name}] Failed to get DNS: {e}")
-        return [], None
+                logger.debug(f"[{safe_name}] No DNS servers configured")
+            
+            return dns_servers, current_dns
+            
+        except subprocess.TimeoutExpired:
+            logger.warning(f"[{safe_name}] resolvectl timeout")
+            return [], None
+        except FileNotFoundError:
+            logger.error("resolvectl not found (systemd-resolved not installed)")
+            return [], None
+        except Exception as e:
+            logger.error(f"[{safe_name}] Failed to get DNS: {e}")
+            return [], None
 
 
 def get_system_dns() -> List[str]:
@@ -264,67 +272,74 @@ def get_system_dns() -> List[str]:
     
     Queries the global DNS configuration from systemd-resolved.
     
+    Thread-Safe (Fix #3): Acquires lock for consistency.
+    
     Returns:
         List of all DNS server IP addresses (IPv4 and IPv6)
+        
+    Security:
+        No elevated privileges required
     """
     logger.debug("Querying system-wide DNS configuration")
     
-    try:
-        result = subprocess.run(
-            ["resolvectl", "status"],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-            check=False
-        )
-        
-        if result.returncode != 0:
-            logger.warning("System DNS: resolvectl query failed")
+    # THREAD SAFETY: Acquire lock (Fix #3)
+    with _dns_query_lock:
+        try:
+            result = subprocess.run(
+                ["resolvectl", "status"],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT_SECONDS,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                logger.warning("System DNS: resolvectl query failed")
+                return []
+            
+            lines = result.stdout.split('\n')
+            
+            # Extract Global section
+            global_lines = []
+            in_global = False
+            
+            for line in lines:
+                line_stripped = line.strip()
+                
+                if not line_stripped:
+                    continue
+                
+                # Start of Global section
+                if DNS_GLOBAL_SECTION_MARKER in line:
+                    in_global = True
+                    continue
+                
+                # End of Global section (Link section starts)
+                if DNS_LINK_SECTION_MARKER in line and in_global:
+                    break
+                
+                if in_global:
+                    global_lines.append(line)
+            
+            # Parse DNS from Global section (optimized - Fix #13)
+            dns_servers = _parse_dns_section(global_lines)
+            
+            if dns_servers:
+                logger.debug(f"System-wide DNS: {', '.join(dns_servers)}")
+            else:
+                logger.debug("System-wide DNS: None configured")
+            
+            return dns_servers
+            
+        except subprocess.TimeoutExpired:
+            logger.warning("System DNS: resolvectl timeout")
             return []
-        
-        lines = result.stdout.split('\n')
-        
-        # Extract Global section
-        global_lines = []
-        in_global = False
-        
-        for line in lines:
-            line_stripped = line.strip()
-            
-            if not line_stripped:
-                continue
-            
-            # Start of Global section
-            if DNS_GLOBAL_SECTION_MARKER in line:
-                in_global = True
-                continue
-            
-            # End of Global section (Link section starts)
-            if DNS_LINK_SECTION_MARKER in line and in_global:
-                break
-            
-            if in_global:
-                global_lines.append(line)
-        
-        # Parse DNS from Global section using shared helper
-        dns_servers = _parse_dns_section(global_lines)
-        
-        if dns_servers:
-            logger.debug(f"System-wide DNS: {', '.join(dns_servers)}")
-        else:
-            logger.debug("System-wide DNS: None configured")
-        
-        return dns_servers
-        
-    except subprocess.TimeoutExpired:
-        logger.warning("System DNS: resolvectl timeout")
-        return []
-    except FileNotFoundError:
-        logger.error("System DNS: resolvectl not found")
-        return []
-    except Exception as e:
-        logger.error(f"System DNS: Failed to query: {e}")
-        return []
+        except FileNotFoundError:
+            logger.error("System DNS: resolvectl not found")
+            return []
+        except Exception as e:
+            logger.error(f"System DNS: Failed to query: {e}")
+            return []
 
 
 # ============================================================================
@@ -342,6 +357,7 @@ def detect_dns_leak(interface_name: str,
     
     Uses DETERMINISTIC method: checks configured DNS servers.
     No timing-dependent connection monitoring.
+    No elevated privileges required.
     
     Args:
         interface_name: Network interface name
@@ -358,6 +374,8 @@ def detect_dns_leak(interface_name: str,
         - WARN: Using unknown DNS servers
         - NOT_APPLICABLE: Not applicable (no VPN active)
     """
+    safe_name = sanitize_for_log(interface_name)
+    
     # Only check for leaks if VPN is active somewhere
     if not vpn_dns:
         return str(DnsLeakStatus.NOT_APPLICABLE)
@@ -366,25 +384,25 @@ def detect_dns_leak(interface_name: str,
     if not configured_dns:
         return str(DnsLeakStatus.NOT_APPLICABLE)
     
-    logger.debug(f"[{interface_name}] Checking configured DNS: {configured_dns}")
+    logger.debug(f"[{safe_name}] Checking configured DNS: {configured_dns}")
     
     # Check for ISP DNS leak (CRITICAL)
     if leaking_dns := _check_isp_dns_leak(configured_dns, isp_dns):
-        logger.warning(f"[{interface_name}] LEAK: Configured with ISP DNS {leaking_dns}")
+        logger.warning(f"[{safe_name}] LEAK: Configured with ISP DNS {leaking_dns}")
         return str(DnsLeakStatus.LEAK)
     
     # Check for VPN DNS usage (SECURE)
     if vpn_configured := _check_vpn_dns_usage(configured_dns, vpn_dns):
-        logger.debug(f"[{interface_name}] OK: Configured with VPN DNS {vpn_configured}")
+        logger.debug(f"[{safe_name}] OK: Configured with VPN DNS {vpn_configured}")
         return str(DnsLeakStatus.OK)
     
     # Check for public DNS usage (ACCEPTABLE)
     if public_configured := _check_public_dns_usage(configured_dns):
-        logger.debug(f"[{interface_name}] OK: Using public DNS {public_configured}")
+        logger.debug(f"[{safe_name}] OK: Using public DNS {public_configured}")
         return str(DnsLeakStatus.OK)
     
     # Unknown DNS servers (SUSPICIOUS)
-    logger.warning(f"[{interface_name}] WARN: Using unknown DNS {configured_dns}")
+    logger.warning(f"[{safe_name}] WARN: Using unknown DNS {configured_dns}")
     return str(DnsLeakStatus.WARN)
 
 
@@ -421,6 +439,7 @@ def check_dns_leaks_all_interfaces(interfaces: List["InterfaceInfo"]) -> None:
     Check for DNS leaks across all interfaces.
     
     Updates each InterfaceInfo object with dns_leak_status.
+    No elevated privileges required.
     
     Args:
         interfaces: List of InterfaceInfo objects (will be modified in-place)

@@ -3,6 +3,11 @@ Logging configuration for netcheck.
 
 Provides structured logging throughout the application with configurable
 verbosity levels. Replaces scattered print() statements with proper logging.
+
+IMPROVEMENTS:
+- Clearer documentation on usage
+- Better integration with sanitization (from utils.system)
+- Color support detection
 """
 
 import logging
@@ -17,6 +22,8 @@ class VerboseFilter(logging.Filter):
     
     Messages at INFO level and above always pass through.
     DEBUG messages only pass when verbose mode is enabled.
+    
+    This allows users to run the tool in quiet mode (default) or verbose mode (-v).
     """
     
     def __init__(self, verbose: bool = False):
@@ -49,6 +56,13 @@ class ColoredFormatter(logging.Formatter):
     Formatter that adds color codes to log messages for terminal output.
     
     Uses ANSI escape codes for colored output in terminals that support it.
+    
+    Color scheme:
+        DEBUG: Cyan (informational)
+        INFO: Green (success/progress)
+        WARNING: Yellow (caution)
+        ERROR: Red (error)
+        CRITICAL: Magenta (severe)
     """
     
     COLORS = {
@@ -86,14 +100,27 @@ def setup_logging(
     Sets up logging handlers for both console and optional file output.
     Console output uses colored formatting, file output uses plain text.
     
+    Logging Levels:
+        DEBUG: Detailed diagnostic information (only shown with -v)
+        INFO: General informational messages (always shown)
+        WARNING: Warning messages (always shown)
+        ERROR: Error messages (always shown)
+        CRITICAL: Critical errors (always shown)
+    
     Args:
         verbose: If True, enable DEBUG level logging
         log_file: Optional file path to write logs to
         use_colors: If True, use colored output for console (default: True)
+                   Set to False with --no-color flag
     
     Examples:
         >>> setup_logging(verbose=True)  # Enable debug logging
         >>> setup_logging(log_file=Path("netcheck.log"))  # Log to file
+        >>> setup_logging(verbose=True, use_colors=False)  # Debug without colors
+    
+    Security:
+        All log messages should use sanitize_for_log() from utils.system
+        to prevent log injection attacks.
     """
     # Determine log level based on verbose flag
     level = logging.DEBUG if verbose else logging.INFO
@@ -143,15 +170,37 @@ def get_logger(name: str) -> logging.Logger:
     """
     Get a logger instance for a module.
     
+    Best Practice:
+        Call this at module level with __name__:
+        
+        ```python
+        from logging_config import get_logger
+        logger = get_logger(__name__)
+        
+        # Then use throughout the module:
+        logger.debug("Debug message")
+        logger.info("Info message")
+        logger.warning("Warning message")
+        logger.error("Error message")
+        ```
+    
+    Security:
+        Always sanitize user-controlled data before logging:
+        
+        ```python
+        from utils.system import sanitize_for_log
+        
+        # WRONG - Potential log injection:
+        logger.debug(f"Processing {user_input}")
+        
+        # CORRECT - Sanitized:
+        logger.debug(f"Processing {sanitize_for_log(user_input)}")
+        ```
+    
     Args:
         name: Module name, typically __name__
         
     Returns:
         Logger instance for the module
-        
-    Examples:
-        >>> logger = get_logger(__name__)
-        >>> logger.debug("Debug message")
-        >>> logger.info("Info message")
     """
     return logging.getLogger(name)
