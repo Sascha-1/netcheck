@@ -3,7 +3,7 @@
 Netcheck Cleanup Script
 
 Removes generated cache and temporary files.
-Cross-platform replacement for cleanup.sh
+
 """
 
 import shutil
