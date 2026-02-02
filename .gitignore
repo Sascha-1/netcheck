@@ -47,6 +47,7 @@ ENV/
 
 # Project-specific
 logs/
+docs/
 *.log
 
 # Temporary files
