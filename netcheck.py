@@ -80,12 +80,10 @@ def main() -> None:
     """Main entry point for the network analysis tool."""
     args = parse_arguments()
     
-    # Validate arguments
     if args.output and not args.export:
         print("Error: --output requires --export", file=sys.stderr)
         sys.exit(1)
     
-    # Setup logging
     setup_logging(
         verbose=args.verbose,
         log_file=args.log_file,
@@ -94,7 +92,6 @@ def main() -> None:
     
     logger.info("Network Analysis Tool starting")
     
-    # Check dependencies
     if not check_dependencies():
         logger.error("Missing required dependencies")
         logger.info("Please install missing packages and try again")
@@ -102,31 +99,24 @@ def main() -> None:
     
     logger.debug("All dependencies found")
     
-    # Collect network data
     network_data = collect_network_data()
     
-    # Handle export mode
     if args.export:
         if args.export == 'json':
             if args.output:
-                # Save to file
                 save_json(network_data, str(args.output))
                 logger.info(f"JSON exported to {args.output}")
             else:
-                # Print to stdout
                 print(export_to_json(network_data))
         
         elif args.export == 'csv':
             if args.output:
-                # Save to file
                 save_csv(network_data, str(args.output))
                 logger.info(f"CSV exported to {args.output}")
             else:
-                # Print to stdout
                 print(export_to_csv(network_data))
     
     else:
-        # Normal table output
         if args.verbose:
             logger.info(f"\n{'='*60}")
             logger.info("NETWORK INTERFACE SUMMARY")

@@ -2,13 +2,9 @@
 Data collection orchestration module.
 
 Coordinates interface detection, hardware identification, network configuration,
-DNS detection, IPv6 support, DNS leak detection, and external API queries to 
-build complete network interface information.
+DNS detection, and external API queries to build complete network interface information.
 
-IMPROVEMENTS:
-- Optional parallel processing for faster execution (3-4x speedup)
-- Better error handling and logging
-- Input validation throughout
+Supports optional parallel processing for faster execution.
 """
 
 import shutil
@@ -33,9 +29,8 @@ def check_dependencies() -> bool:
     """
     Verify all required system commands are available.
     
-    Checks for:
-    - System commands: ip, lspci, lsusb, ethtool, resolvectl, ss
-    - Python packages: requests, urllib3
+    Checks for system commands: ip, lspci, lsusb, ethtool, resolvectl, ss
+    and Python packages: requests, urllib3
     
     Returns:
         True if all dependencies are present, False otherwise
@@ -44,7 +39,6 @@ def check_dependencies() -> bool:
     
     all_present = True
     
-    # Check system commands
     for cmd in REQUIRED_COMMANDS:
         if not shutil.which(cmd):
             logger.error(f"Missing: {cmd}")
@@ -52,7 +46,6 @@ def check_dependencies() -> bool:
         else:
             logger.debug(f"Found: {cmd}")
     
-    # Check Python packages
     try:
         import requests
         logger.debug("Found: Python requests library")
@@ -67,7 +60,6 @@ def check_dependencies() -> bool:
     except ImportError:
         logger.warning("Missing: Python urllib3 library (recommended for retry logic)")
         logger.info("Install with: pip install urllib3")
-        # Not critical, requests can work without it
     
     if all_present:
         logger.debug("All dependencies found")
@@ -90,35 +82,20 @@ def process_single_interface(
     - DNS configuration
     - Routing information
     - Egress information (if active interface)
-    
-    Args:
-        iface_name: Interface name to process
-        active_interface: Name of active interface (or None)
-        egress: Egress information (or None)
-        
-    Returns:
-        InterfaceInfo object with collected data
     """
     safe_name = sanitize_for_log(iface_name)
     logger.debug(f"\nProcessing {safe_name}...")
     
-    # Create base info structure
     info = InterfaceInfo.create_empty(iface_name)
     
-    # Detect interface type
     info.interface_type = detect_interface_type(iface_name)
     logger.debug(f"Type: {info.interface_type}")
     
-    # Get hardware device name
     info.device = get_device_name(iface_name, info.interface_type)
     
-    # Get network configuration - IPv4
     info.internal_ipv4 = get_internal_ipv4(iface_name)
-    
-    # Get network configuration - IPv6
     info.internal_ipv6 = get_internal_ipv6(iface_name)
     
-    # Get DNS servers
     dns_list, current_dns = get_interface_dns(iface_name)
     info.dns_servers = dns_list
     info.current_dns = current_dns
@@ -126,11 +103,9 @@ def process_single_interface(
     if len(dns_list) > 1:
         logger.debug(f"Total DNS servers: {len(dns_list)}")
     
-    # Get routing information
     info.default_gateway = get_default_gateway(iface_name)
     info.metric = get_route_metric(iface_name)
     
-    # Attach egress information if this is the active interface
     if iface_name == active_interface and egress:
         info.external_ipv4 = egress.external_ip
         info.external_ipv6 = egress.external_ipv6
@@ -151,15 +126,8 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
     Stores raw data - cleaning and formatting happens at display time.
     Verbosity controlled by logging level set via --verbose flag.
     
-    PERFORMANCE:
-    - With parallel=True: Uses thread pool for 3-4x speedup on multi-core systems
-    - With parallel=False: Sequential processing (safer, easier to debug)
-    
-    Args:
-        parallel: If True, use parallel processing (default: True)
-        
-    Returns:
-        List of InterfaceInfo objects with raw data
+    With parallel=True: Uses thread pool for 3-4x speedup on multi-core systems
+    With parallel=False: Sequential processing (safer, easier to debug)
     """
     logger.info("Collecting network interface data...")
     
@@ -171,7 +139,6 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
     
     logger.info(f"Found {len(interfaces)} interfaces: {', '.join(interfaces)}")
     
-    # Identify active interface and get egress information
     active_interface = get_active_interface()
     egress = None
     
@@ -183,21 +150,17 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
     else:
         logger.debug("No active default route found")
     
-    # Collect information for each interface
     results: List[InterfaceInfo] = []
     
     if parallel and len(interfaces) > 1:
-        # PARALLEL PROCESSING: Use thread pool for significant speedup
         logger.debug(f"Using parallel processing with {MAX_WORKERS} workers")
         
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            # Submit all interface processing tasks
             future_to_iface = {
                 executor.submit(process_single_interface, iface, active_interface, egress): iface
                 for iface in interfaces
             }
             
-            # Collect results as they complete
             for future in as_completed(future_to_iface):
                 iface = future_to_iface[future]
                 try:
@@ -206,15 +169,12 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
                 except Exception as e:
                     safe_iface = sanitize_for_log(iface)
                     logger.error(f"Failed to process {safe_iface}: {e}")
-                    # Create empty info for failed interface
                     results.append(InterfaceInfo.create_empty(iface))
         
-        # Sort results to match original interface order
         interface_order = {name: idx for idx, name in enumerate(interfaces)}
         results.sort(key=lambda x: interface_order.get(x.name, 999))
         
     else:
-        # SEQUENTIAL PROCESSING: Process interfaces one by one
         if not parallel:
             logger.debug("Using sequential processing (parallel=False)")
         
@@ -225,14 +185,11 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
             except Exception as e:
                 safe_iface = sanitize_for_log(iface_name)
                 logger.error(f"Failed to process {safe_iface}: {e}")
-                # Create empty info for failed interface
                 results.append(InterfaceInfo.create_empty(iface_name))
     
-    # Check for DNS leaks
     logger.debug("")
     check_dns_leaks_all_interfaces(results)
     
-    # Detect VPN underlay (which physical interface carries VPN tunnel)
     detect_vpn_underlay(results)
     
     return results

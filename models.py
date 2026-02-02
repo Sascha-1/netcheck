@@ -2,7 +2,6 @@
 Data structure definitions.
 
 Type-safe data models for network interface and egress information.
-Uses Enums for type safety and better IDE support.
 """
 
 from dataclasses import dataclass
@@ -35,13 +34,13 @@ class InterfaceInfo:
     """
     
     name: str
-    interface_type: str  # InterfaceType value
+    interface_type: str
     device: str
     internal_ipv4: str
     internal_ipv6: str
     dns_servers: list[str]
     current_dns: Optional[str]
-    dns_leak_status: str  # DnsLeakStatus value
+    dns_leak_status: str
     external_ipv4: str
     external_ipv6: str
     egress_isp: str
@@ -56,21 +55,13 @@ class InterfaceInfo:
         """
         Create an InterfaceInfo with default placeholder values.
         
-        Uses DataMarker enums for consistent placeholder values throughout
-        the application.
+        Uses DataMarker enums for consistent placeholder values.
         
         Args:
             name: Interface name
             
         Returns:
             InterfaceInfo with all fields set to default markers
-            
-        Examples:
-            >>> info = InterfaceInfo.create_empty("eth0")
-            >>> info.device
-            'N/A'
-            >>> info.dns_leak_status
-            '--'
         """
         return cls(
             name=name,
@@ -116,11 +107,6 @@ class EgressInfo:
         
         Returns:
             EgressInfo with all fields set to DataMarker.ERROR
-            
-        Examples:
-            >>> info = EgressInfo.create_error()
-            >>> info.external_ip
-            'ERR'
         """
         error_marker = str(DataMarker.ERROR)
         return cls(

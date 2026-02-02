@@ -1,20 +1,15 @@
 """
 Enumeration types for netcheck.
 
-Provides type-safe constants for interface types, DNS leak status, and other values.
-Improves code clarity and enables better IDE support.
+Provides type-safe constants for interface types, DNS leak status, and data markers.
 """
 
 from enum import Enum
 
 
 class InterfaceType(str, Enum):
-    """
-    Network interface type classifications.
+    """Network interface type classifications."""
     
-    Inherits from str to maintain backward compatibility with existing code
-    that expects string values.
-    """
     LOOPBACK = "loopback"
     ETHERNET = "ethernet"
     WIRELESS = "wireless"
@@ -35,6 +30,7 @@ class DnsLeakStatus(str, Enum):
     
     Indicates whether DNS queries are leaking to ISP servers when VPN is active.
     """
+    
     OK = "OK"
     LEAK = "LEAK"
     WARN = "WARN"
@@ -47,11 +43,12 @@ class DnsLeakStatus(str, Enum):
 
 class DataMarker(str, Enum):
     """
-    Special markers for data that cannot be determined.
+    Special markers for data states.
     
     Used consistently throughout the application to indicate various
-    states of unavailable data.
+    states of unavailable or inapplicable data.
     """
+    
     NOT_APPLICABLE = "--"
     NOT_AVAILABLE = "N/A"
     NONE_VALUE = "NONE"

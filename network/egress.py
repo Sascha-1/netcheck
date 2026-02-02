@@ -1,17 +1,8 @@
 """
 External egress information module.
 
-Queries ipinfo.io for external IP address (IPv4 and IPv6), ISP, and country information.
+Queries ipinfo.io for external IP address (IPv4 and IPv6), ISP, and country.
 Returns raw data - cleaning happens at display time.
-
-IMPROVEMENTS:
-- Retry logic with exponential backoff (Fix #5)
-- Response validation (Fix #6)
-- Better error handling
-- Test-compatible (uses requests.get directly, not Session)
-
-Security:
-    All operations safe for unprivileged use (no sudo required)
 """
 
 import requests
@@ -32,10 +23,6 @@ from utils.system import is_valid_ipv4, is_valid_ipv6, sanitize_for_log
 logger = get_logger(__name__)
 
 
-# ============================================================================
-# Response Validation (Fix #6)
-# ============================================================================
-
 def validate_api_response(data: Dict[str, Any], ip_version: str) -> bool:
     """
     Validate API response structure and content.
@@ -47,19 +34,17 @@ def validate_api_response(data: Dict[str, Any], ip_version: str) -> bool:
     Returns:
         True if response is valid, False otherwise
     """
-    # Check required field exists
     if "ip" not in data:
         logger.error(f"{ip_version} API response missing 'ip' field")
         return False
     
-    # Validate IP format
     ip_addr = data.get("ip", "")
     
     if ip_version == "IPv4":
         if not is_valid_ipv4(ip_addr):
             logger.error(f"Invalid IPv4 from API: {sanitize_for_log(ip_addr)}")
             return False
-    else:  # IPv6
+    else:
         if not is_valid_ipv6(ip_addr):
             logger.error(f"Invalid IPv6 from API: {sanitize_for_log(ip_addr)}")
             return False
@@ -67,15 +52,9 @@ def validate_api_response(data: Dict[str, Any], ip_version: str) -> bool:
     return True
 
 
-# ============================================================================
-# HTTP Request with Retry Logic (Fix #5)
-# ============================================================================
-
 def get_with_retry(url: str, timeout: int) -> Optional[requests.Response]:
     """
     Execute HTTP GET with exponential backoff retry.
-    
-    Uses requests.get directly (not Session) for test compatibility.
     
     Retry strategy:
     - Attempts: 3 (configurable via RETRY_ATTEMPTS)
@@ -93,21 +72,17 @@ def get_with_retry(url: str, timeout: int) -> Optional[requests.Response]:
         try:
             response = requests.get(url, timeout=timeout)
             
-            # Success cases
             if response.status_code == 200:
                 return response
             
-            # Retry on server errors (5xx)
             if 500 <= response.status_code < 600:
                 if attempt < RETRY_ATTEMPTS - 1:
                     delay = RETRY_BACKOFF_FACTOR * (2 ** attempt)
                     logger.debug(f"Server error {response.status_code}, retrying in {delay}s (attempt {attempt + 1}/{RETRY_ATTEMPTS})")
                     time.sleep(delay)
                     continue
-                # Last attempt - return error response
                 return response
             
-            # Non-retryable status (4xx, etc) - return immediately
             return response
             
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
@@ -116,31 +91,23 @@ def get_with_retry(url: str, timeout: int) -> Optional[requests.Response]:
                 logger.debug(f"Request failed: {type(e).__name__}, retrying in {delay}s (attempt {attempt + 1}/{RETRY_ATTEMPTS})")
                 time.sleep(delay)
                 continue
-            # Last attempt - return None
             logger.warning(f"All {RETRY_ATTEMPTS} attempts failed: {type(e).__name__}")
             return None
             
         except StopIteration:
-            # Mock side_effect exhausted (test compatibility)
             logger.debug("Mock side_effect exhausted (test environment)")
             return None
             
         except requests.exceptions.RequestException as e:
-            # Other request errors - don't retry
             logger.error(f"Request error: {sanitize_for_log(str(e))}")
             return None
             
         except Exception as e:
-            # Catch-all for unexpected errors (test compatibility)
             logger.error(f"Unexpected error: {sanitize_for_log(str(e))}")
             return None
     
     return None
 
-
-# ============================================================================
-# Main Egress Query
-# ============================================================================
 
 def get_egress_info() -> EgressInfo:
     """
@@ -148,16 +115,10 @@ def get_egress_info() -> EgressInfo:
     
     Returns raw data without cleaning - display layer handles formatting.
     
-    Improvements:
-    - Automatic retry on transient failures (Fix #5)
-    - Response validation (Fix #6)
-    - Better error distinction
-    
     Returns:
         EgressInfo object with raw external IPs (IPv4/IPv6), ISP, and country.
         On failure, returns EgressInfo with all fields set to "ERR".
     """
-    # Query IPv4 egress
     logger.info(f"Connecting to {IPINFO_URL}...")
     
     external_ipv4 = "ERR"
@@ -176,13 +137,11 @@ def get_egress_info() -> EgressInfo:
             
             logger.debug("IPv4 response received, parsing data...")
             
-            # Validate response
             if not validate_api_response(data, "IPv4"):
                 logger.error("IPv4 API response validation failed")
             else:
-                # Extract raw values - no cleaning here
                 external_ipv4 = data.get("ip", "ERR")
-                isp = data.get("org", "ERR")  # Keep raw format like "AS12345 ISP Name"
+                isp = data.get("org", "ERR")
                 country = data.get("country", "ERR")
                 
                 logger.debug(f"External IPv4: {external_ipv4}")
@@ -192,10 +151,9 @@ def get_egress_info() -> EgressInfo:
         except (ValueError, KeyError) as e:
             logger.error(f"Failed to parse IPv4 response: {sanitize_for_log(str(e))}")
     
-    # Query IPv6 egress
     logger.info(f"Connecting to {IPINFO_IPv6_URL}...")
     
-    external_ipv6 = "--"  # Default to N/A if no IPv6
+    external_ipv6 = "--"
     
     response_v6 = get_with_retry(IPINFO_IPv6_URL, TIMEOUT_SECONDS)
     
@@ -209,7 +167,6 @@ def get_egress_info() -> EgressInfo:
             
             logger.debug("IPv6 response received, parsing data...")
             
-            # Validate response
             if not validate_api_response(data_v6, "IPv6"):
                 logger.debug("IPv6 API response validation failed")
             else:

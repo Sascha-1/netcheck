@@ -2,16 +2,10 @@
 Interface and hardware detection module.
 
 Consolidates interface type detection and hardware identification.
-
-DESIGN PRINCIPLE: Consistent deterministic querying
-- PCI devices: Read vendor:device from sysfs → Query lspci database
-- USB devices: Read vendor:product from sysfs → Query lsusb database
-- Return raw data from databases - cleaning happens at display time
-
-SECURITY: All interface names validated before use in commands
+Uses consistent deterministic querying: read vendor:device from sysfs, then query hardware database.
+Returns raw data - cleaning happens at display time.
 """
 
-import sys
 from pathlib import Path
 from functools import cached_property
 from dataclasses import dataclass
@@ -31,8 +25,6 @@ class SysfsInterface:
     
     Provides cached properties for expensive filesystem operations.
     All hardware ID queries use consistent pattern: read from sysfs, query database.
-    
-    Security: Interface name validated on construction.
     """
     name: str
     
@@ -137,10 +129,7 @@ def get_interface_list() -> list[str]:
     """
     Get list of all network interfaces from kernel.
     
-    Security: Validates all interface names before returning.
-    
-    Returns:
-        List of valid interface names
+    Validates all interface names before returning.
     """
     logger.debug("Querying network interfaces via 'ip -o link show'")
     
@@ -154,7 +143,6 @@ def get_interface_list() -> list[str]:
         if line and len(parts := line.split(":", 2)) >= 2:
             iface = parts[1].strip()
             
-            # SECURITY: Validate interface name before adding
             if validate_interface_name(iface):
                 interfaces.append(iface)
             else:
@@ -169,14 +157,6 @@ def is_usb_tethered_device(sysfs: SysfsInterface, verbose: bool = False) -> bool
     Determine if interface is a USB-tethered device.
     
     Checks driver name against known USB tethering drivers.
-    Deterministic on kernel 6.12+ with modern hardware.
-    
-    Args:
-        sysfs: SysfsInterface object
-        verbose: If True, use debug logging (legacy parameter)
-    
-    Returns:
-        True if USB tethering device
     """
     if not sysfs.is_usb:
         return False
@@ -206,16 +186,6 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> str:
     4. Wireless via phy80211
     5. Kernel link type
     6. Name prefix patterns
-    
-    Args:
-        iface_name: Interface name (must be validated)
-        verbose: If True, use debug logging (legacy parameter)
-    
-    Returns:
-        Interface type string (InterfaceType enum value)
-    
-    Security:
-        Assumes iface_name is already validated by get_interface_list()
     """
     safe_name = sanitize_for_log(iface_name)
     
@@ -241,7 +211,6 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> str:
         logger.debug(f"[{safe_name}] Detected as wireless (phy80211 present)")
         return str(InterfaceType.WIRELESS)
     
-    # Query kernel for link type
     output = run_command(["ip", "-d", "link", "show", iface_name])
     if output:
         output_lower = output.lower()
@@ -262,7 +231,6 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> str:
             logger.debug(f"[{safe_name}] Detected as bridge")
             return str(InterfaceType.BRIDGE)
     
-    # Check systemd naming patterns
     for prefix, iface_type in INTERFACE_TYPE_PATTERNS.items():
         if iface_name.startswith(prefix):
             logger.debug(f"[{safe_name}] Detected as {iface_type} (systemd prefix '{prefix}')")
@@ -280,16 +248,6 @@ def get_pci_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
     1. Read vendor:device IDs from sysfs
     2. Query lspci database with those IDs
     3. Return raw device name
-    
-    Args:
-        sysfs: SysfsInterface object
-        verbose: If True, use debug logging (legacy parameter)
-        
-    Returns:
-        Raw device name or None
-        
-    Security:
-        Uses validated hardware IDs, not interface name directly in command
     """
     safe_name = sanitize_for_log(sysfs.name)
     
@@ -301,7 +259,6 @@ def get_pci_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
     
     logger.debug(f"[{safe_name}] PCI ID: {vendor_id}:{device_id}")
     
-    # SECURITY: Using hardware IDs, not interface name in command
     lspci_output = run_command(["lspci", "-d", f"{vendor_id}:{device_id}"])
     if not lspci_output:
         logger.error(f"lspci query failed for {safe_name} ({vendor_id}:{device_id})")
@@ -325,20 +282,10 @@ def get_usb_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
     """
     Get USB device name from hardware database.
     
-    Consistent query pattern (same as PCI):
+    Consistent query pattern:
     1. Read vendor:product IDs from sysfs
     2. Query lsusb database with those IDs
     3. Return raw device name
-    
-    Args:
-        sysfs: SysfsInterface object
-        verbose: If True, use debug logging (legacy parameter)
-        
-    Returns:
-        Raw device name or None
-        
-    Security:
-        Uses validated hardware IDs, not interface name directly in command
     """
     safe_name = sanitize_for_log(sysfs.name)
     
@@ -355,7 +302,6 @@ def get_usb_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
     
     logger.debug(f"[{safe_name}] USB ID: {vendor_id}:{product_id}")
     
-    # SECURITY: Using hardware IDs, not interface name in command
     lsusb_output = run_command(["lsusb", "-d", f"{vendor_id}:{product_id}"])
     if not lsusb_output:
         logger.error(f"lsusb query failed for {safe_name} ({vendor_id}:{product_id})")
@@ -366,18 +312,13 @@ def get_usb_device_name(sysfs: SysfsInterface, verbose: bool = False) -> str | N
         logger.warning(f"Empty lsusb output for {safe_name}")
         return None
     
-    # Parse format: "Bus 005 Device 013: ID 18d1:4eeb Google Inc. Pixel 9a"
     line = lines[0]
     
     if "ID " not in line:
         logger.error(f"Unexpected lsusb format for {safe_name}")
         return None
     
-    # Split on "ID " and take the second part
     id_part = line.split("ID ", 1)[1]
-    
-    # Now we have "18d1:4eeb Google Inc. Pixel 9a"
-    # Split on whitespace and skip first element (the vendor:product ID)
     parts = id_part.split(None, 1)
     
     if len(parts) < 2:
@@ -399,17 +340,6 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
     - USB devices: Query lsusb database
     
     All names returned raw - cleaning at display time.
-    
-    Args:
-        iface_name: Interface name (must be validated)
-        iface_type: Interface type (InterfaceType enum value)
-        verbose: If True, use debug logging (legacy parameter)
-        
-    Returns:
-        Raw device name or DataMarker.NOT_AVAILABLE
-        
-    Security:
-        Assumes iface_name is already validated
     """
     safe_name = sanitize_for_log(iface_name)
     
@@ -424,12 +354,10 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
                 return str(DataMarker.NOT_AVAILABLE)
             
             if sysfs.device_path:
-                # Rare: hardware VPN accelerator
                 if device_name := get_pci_device_name(sysfs, verbose):
                     logger.debug(f"[{safe_name}] VPN has hardware device: {sanitize_for_log(device_name)}")
                     return device_name
             else:
-                # Normal: virtual VPN interface
                 logger.debug(f"[{safe_name}] Virtual VPN interface")
                 output = run_command(["ip", "-d", "link", "show", iface_name])
                 if output and "wireguard" in output.lower():
@@ -447,7 +375,6 @@ def get_device_name(iface_name: str, iface_type: str, verbose: bool = False) -> 
                 return "USB Tethered Device"
         
         case _:
-            # Physical PCI/PCIe devices
             try:
                 sysfs = SysfsInterface(iface_name)
                 return get_pci_device_name(sysfs, verbose) or str(DataMarker.NOT_AVAILABLE)

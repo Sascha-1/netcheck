@@ -3,30 +3,6 @@ Export functionality for network analysis data.
 
 Provides JSON and CSV export capabilities for InterfaceInfo data.
 Both formats are built-in to Python (no external dependencies).
-
-Why JSON:
-    - Perfect for structured/nested data
-    - Native Python types
-    - Easy to parse programmatically
-    - Standard format for APIs/automation
-
-Why CSV:
-    - Universal spreadsheet compatibility
-    - Human-readable in text editors
-    - Easy to import into Excel/Google Sheets
-    - Good for tabular analysis
-
-Usage:
-    >>> from export import export_to_json, export_to_csv
-    >>> interfaces = collect_network_data()
-    >>> 
-    >>> # Export to JSON
-    >>> json_output = export_to_json(interfaces)
-    >>> print(json_output)
-    >>> 
-    >>> # Export to CSV
-    >>> csv_output = export_to_csv(interfaces)
-    >>> print(csv_output)
 """
 
 import json
@@ -39,15 +15,7 @@ from models import InterfaceInfo
 
 
 def _interface_to_dict(interface: InterfaceInfo) -> Dict[str, Any]:
-    """
-    Convert InterfaceInfo to dictionary for serialization.
-    
-    Args:
-        interface: InterfaceInfo object to convert
-        
-    Returns:
-        Dictionary representation of interface data
-    """
+    """Convert InterfaceInfo to dictionary for serialization."""
     return {
         "name": interface.name,
         "interface_type": interface.interface_type,
@@ -83,20 +51,10 @@ def export_to_json(
         
     Returns:
         JSON string representation of network data
-        
-    Examples:
-        >>> interfaces = [InterfaceInfo.create_empty("eth0")]
-        >>> json_str = export_to_json(interfaces)
-        >>> print(json_str)
-        {
-          "metadata": { ... },
-          "interfaces": [ ... ]
-        }
     """
     data: Dict[str, Any] = {}
     
     if include_metadata:
-        # Add metadata about the export
         data["metadata"] = {
             "timestamp": datetime.now().isoformat(),
             "interface_count": len(interfaces),
@@ -104,7 +62,6 @@ def export_to_json(
             "version": "1.0",
         }
         
-        # Add summary statistics
         vpn_interfaces = [i for i in interfaces if i.interface_type == "vpn"]
         leak_detected = any(i.dns_leak_status == "LEAK" for i in interfaces)
         
@@ -114,7 +71,6 @@ def export_to_json(
             "dns_leak_detected": leak_detected,
         }
     
-    # Convert interfaces to dictionaries
     data["interfaces"] = [_interface_to_dict(i) for i in interfaces]
     
     return json.dumps(data, indent=indent, ensure_ascii=False)
@@ -137,34 +93,14 @@ def export_to_csv(
         
     Returns:
         CSV string representation of network data
-        
-    Examples:
-        >>> interfaces = [InterfaceInfo.create_empty("eth0")]
-        >>> csv_str = export_to_csv(interfaces)
-        >>> print(csv_str)
-        name,interface_type,device,...
-        eth0,N/A,N/A,...
     """
     output = StringIO()
     
-    # Define CSV columns (matches table display order)
     fieldnames = [
-        "name",
-        "interface_type",
-        "device",
-        "internal_ipv4",
-        "internal_ipv6",
-        "dns_servers",  # Will be joined with semicolons
-        "current_dns",
-        "dns_leak_status",
-        "external_ipv4",
-        "external_ipv6",
-        "egress_isp",
-        "egress_country",
-        "default_gateway",
-        "metric",
-        "vpn_server_ip",
-        "carries_vpn",
+        "name", "interface_type", "device", "internal_ipv4", "internal_ipv6",
+        "dns_servers", "current_dns", "dns_leak_status",
+        "external_ipv4", "external_ipv6", "egress_isp", "egress_country",
+        "default_gateway", "metric", "vpn_server_ip", "carries_vpn",
     ]
     
     writer = csv.DictWriter(
@@ -177,17 +113,11 @@ def export_to_csv(
     if include_header:
         writer.writeheader()
     
-    # Write data rows
     for interface in interfaces:
         row = _interface_to_dict(interface)
         
-        # Flatten DNS servers list to semicolon-separated string
         row["dns_servers"] = ";".join(row["dns_servers"]) if row["dns_servers"] else ""
-        
-        # Convert boolean to string
         row["carries_vpn"] = "true" if row["carries_vpn"] else "false"
-        
-        # Handle None values
         row["current_dns"] = row["current_dns"] or ""
         row["vpn_server_ip"] = row["vpn_server_ip"] or ""
         
@@ -203,13 +133,6 @@ def save_json(interfaces: List[InterfaceInfo], filepath: str) -> None:
     Args:
         interfaces: List of InterfaceInfo objects to save
         filepath: Path to output JSON file
-        
-    Raises:
-        IOError: If file cannot be written
-        
-    Examples:
-        >>> interfaces = collect_network_data()
-        >>> save_json(interfaces, "network-state.json")
     """
     json_str = export_to_json(interfaces)
     
@@ -224,13 +147,6 @@ def save_csv(interfaces: List[InterfaceInfo], filepath: str) -> None:
     Args:
         interfaces: List of InterfaceInfo objects to save
         filepath: Path to output CSV file
-        
-    Raises:
-        IOError: If file cannot be written
-        
-    Examples:
-        >>> interfaces = collect_network_data()
-        >>> save_csv(interfaces, "network-state.csv")
     """
     csv_str = export_to_csv(interfaces)
     
