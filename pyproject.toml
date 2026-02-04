@@ -117,3 +117,132 @@ exclude = [
 ]
 
 # No per-module overrides - strict rules apply everywhere
+
+# ============================================================================
+# Pylint Configuration  
+# ============================================================================
+
+[tool.pylint.main]
+# Use all available CPUs for parallel processing
+jobs = 0
+
+# Python version
+py-version = "3.12"
+
+# Analyze all Python files recursively
+recursive = true
+
+# Ignore patterns (match mypy/pytest)
+ignore-paths = [
+    "^build/.*$",
+    "^dist/.*$",
+    "^\\.venv/.*$",
+    "^venv/.*$",
+    "^env/.*$",
+    "^\\.mypy_cache/.*$",
+    "^\\.pytest_cache/.*$",
+    "^htmlcov/.*$",
+    "^__pycache__/.*$",
+]
+
+[tool.pylint.messages_control]
+# Disable specific warnings that conflict with our coding style or are too noisy
+disable = [
+    # Docstring warnings (we have docstrings where meaningful)
+    "missing-module-docstring",
+    "missing-class-docstring", 
+    "missing-function-docstring",
+    
+    # Design warnings (sometimes legitimate to violate)
+    "too-few-public-methods",      # Dataclasses/DTOs often have few methods
+    "too-many-arguments",          # Some functions legitimately need many args
+    "too-many-locals",             # Complex functions may need many locals
+    "too-many-branches",           # Detection logic has many branches
+    "too-many-statements",         # Some functions are legitimately complex
+    
+    # Naming warnings (allow flexible naming)
+    "invalid-name",                # Allow short names like 'e', 'i', 'f'
+    
+    # Code duplication (some similarity acceptable in tests)
+    "duplicate-code",
+    
+    # Access warnings (we use _private functions intentionally)
+    "protected-access",            # Allow calling _private functions in same package
+    
+    # Style warnings (handled by other tools)
+    "line-too-long",               # Handled by black (100 char limit)
+    "unnecessary-pass",            # Sometimes needed for clarity
+    
+    # Import warnings (allow flexibility)
+    "wrong-import-order",          # isort handles this
+    "ungrouped-imports",           # isort handles this
+    
+    # Exception warnings (sometimes we need broad catching)
+    "broad-except",                # Sometimes catching Exception is appropriate
+    "broad-exception-caught",      # Sometimes catching Exception is appropriate
+]
+
+[tool.pylint.format]
+# Maximum line length (match black/mypy)
+max-line-length = 100
+
+# Allow common short variable names
+good-names = [
+    "i", "j", "k",           # Loop counters
+    "e", "ex",               # Exceptions
+    "f", "fp",               # Files
+    "db", "id",              # Common abbreviations
+    "ip", "v4", "v6",        # Network-specific
+    "_",                     # Unused variables
+]
+
+[tool.pylint.design]
+# Complexity thresholds (reasonable but not too strict)
+max-args = 10              # Maximum function arguments
+max-attributes = 15        # Maximum class attributes
+max-bool-expr = 6          # Maximum boolean expressions
+max-branches = 20          # Maximum branches in a function
+max-locals = 25            # Maximum local variables
+max-returns = 8            # Maximum return statements
+max-statements = 80        # Maximum statements in a function
+
+[tool.pylint.basic]
+# Docstring requirements (require only for public API)
+no-docstring-rgx = "^_|^test_"  # Don't require docstrings for private/test functions
+
+# Allow TODO/FIXME comments
+notes = ["FIXME", "XXX"]  # Don't warn about TODO
+
+[tool.pylint.similarities]
+# Duplicate code detection
+min-similarity-lines = 10  # Minimum lines to trigger duplicate warning
+ignore-comments = true
+ignore-docstrings = true
+ignore-imports = true
+ignore-signatures = true
+
+[tool.pylint.typecheck]
+# Don't warn about dynamically generated members
+generated-members = ["pytest.*", "mock.*", "MagicMock.*"]
+
+[tool.pylint.imports]
+# Import preferences
+allow-wildcard-with-all = false
+preferred-modules = []
+
+[tool.pylint.exceptions]
+# Exception handling
+overgeneral-exceptions = ["builtins.BaseException"]  # Only BaseException is too broad
+
+[tool.pylint.logging]
+# Logging format (we use f-strings in logging)
+logging-format-style = "new"  # Allow f-strings in logging
+
+[tool.pylint.miscellaneous]
+# Don't warn about TODO comments
+notes = []
+
+[tool.pylint.refactoring]
+# Refactoring suggestions (keep reasonable ones)
+max-nested-blocks = 6      # Maximum nested block depth
+never-returning-functions = ["sys.exit", "argparse.ArgumentParser.error"]

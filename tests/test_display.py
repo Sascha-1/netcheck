@@ -14,26 +14,26 @@ class TestCleanupDeviceName:
     def test_remove_parentheses(self) -> None:
         """Test removing content in parentheses."""
         from display import cleanup_device_name
-        
+
         result = cleanup_device_name("Intel I219-V (Rev 1.0)")
-        
+
         assert "Rev 1.0" not in result
         assert "Intel" in result
 
     def test_remove_brackets(self) -> None:
         """Test removing content in brackets."""
         from display import cleanup_device_name
-        
+
         result = cleanup_device_name("Device [ABC123]")
-        
+
         assert "ABC123" not in result
 
     def test_remove_corporation_terms(self) -> None:
         """Test removing corporate terms."""
         from display import cleanup_device_name
-        
+
         result = cleanup_device_name("Intel Corporation Ethernet Controller")
-        
+
         # Should remove "Corporation" and "Controller"
         assert "Corporation" not in result
         assert "Controller" not in result
@@ -41,19 +41,19 @@ class TestCleanupDeviceName:
     def test_empty_result_returns_original(self) -> None:
         """Test that empty result returns original name."""
         from display import cleanup_device_name
-        
+
         # If cleaning produces empty string, return original
         result = cleanup_device_name("Corporation")
-        
+
         assert isinstance(result, str)
         assert len(result) > 0
 
     def test_data_marker_handling(self) -> None:
         """Test handling of DataMarker values."""
         from display import cleanup_device_name
-        
+
         result = cleanup_device_name(str(DataMarker.NOT_AVAILABLE))
-        
+
         assert result == str(DataMarker.NOT_AVAILABLE)
 
 
@@ -63,26 +63,26 @@ class TestCleanupIspName:
     def test_remove_asn_prefix(self) -> None:
         """Test removing ASN prefix from ISP name."""
         from display import cleanup_isp_name
-        
+
         result = cleanup_isp_name("AS12345 Example ISP")
-        
+
         assert result == "Example ISP"
         assert "AS12345" not in result
 
     def test_no_asn_prefix(self) -> None:
         """Test ISP name without ASN prefix."""
         from display import cleanup_isp_name
-        
+
         result = cleanup_isp_name("Example ISP")
-        
+
         assert result == "Example ISP"
 
     def test_data_marker_handling(self) -> None:
         """Test handling of DataMarker values."""
         from display import cleanup_isp_name
-        
+
         result = cleanup_isp_name(str(DataMarker.NOT_AVAILABLE))
-        
+
         assert result == str(DataMarker.NOT_AVAILABLE)
 
 
@@ -92,34 +92,34 @@ class TestShortenText:
     def test_short_text_unchanged(self) -> None:
         """Test that short text is not modified."""
         from display import shorten_text
-        
+
         result = shorten_text("Short", 20)
-        
+
         assert result == "Short"
 
     def test_long_text_shortened(self) -> None:
         """Test that long text is shortened."""
         from display import shorten_text
-        
+
         result = shorten_text("Very Long Text That Should Be Shortened", 10)
-        
+
         assert len(result) <= 11  # May add ellipsis
 
     def test_break_at_word_boundary(self) -> None:
         """Test breaking at word boundaries when possible."""
         from display import shorten_text
-        
+
         result = shorten_text("One Two Three Four", 8)
-        
+
         # Should break at word boundary if possible
         assert "One Two" in result or len(result) <= 11
 
     def test_empty_text(self) -> None:
         """Test with empty text."""
         from display import shorten_text
-        
+
         result = shorten_text("", 10)
-        
+
         assert result == ""
 
 
@@ -129,9 +129,9 @@ class TestFormatOutput:
     def test_format_empty_interface_list(self, capsys: CaptureFixture[str]) -> None:
         """Test formatting with no interfaces."""
         from display import format_output
-        
+
         format_output([])
-        
+
         captured = capsys.readouterr()
         # Should still show headers and structure
         assert "Network Analysis Tool" in captured.out or len(captured.out) > 0
@@ -139,7 +139,7 @@ class TestFormatOutput:
     def test_format_single_interface(self, capsys: CaptureFixture[str]) -> None:
         """Test formatting with one interface."""
         from display import format_output
-        
+
         interface = InterfaceInfo(
             name="eth0",
             interface_type=str(InterfaceType.ETHERNET),
@@ -158,9 +158,9 @@ class TestFormatOutput:
             vpn_server_ip=None,
             carries_vpn=False,
         )
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         assert "eth0" in captured.out
         assert "192.168.1.100" in captured.out
@@ -168,7 +168,7 @@ class TestFormatOutput:
     def test_format_multiple_interfaces(self, capsys: CaptureFixture[str]) -> None:
         """Test formatting with multiple interfaces."""
         from display import format_output
-        
+
         interfaces = [
             InterfaceInfo(
                 name="lo",
@@ -207,9 +207,9 @@ class TestFormatOutput:
                 carries_vpn=False,
             ),
         ]
-        
+
         format_output(interfaces)
-        
+
         captured = capsys.readouterr()
         assert "lo" in captured.out
         assert "eth0" in captured.out
@@ -219,18 +219,18 @@ class TestFormatOutput:
     def test_color_legend_printed(self, capsys: CaptureFixture[str]) -> None:
         """Test that color legend is printed."""
         from display import format_output
-        
+
         interface = InterfaceInfo.create_empty("eth0")
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         assert "Color Legend" in captured.out or "GREEN" in captured.out
 
     def test_vpn_interface_display(self, capsys: CaptureFixture[str]) -> None:
         """Test display of VPN interface."""
         from display import format_output
-        
+
         interface = InterfaceInfo(
             name="tun0",
             interface_type=str(InterfaceType.VPN),
@@ -249,9 +249,9 @@ class TestFormatOutput:
             vpn_server_ip="10.2.0.1",
             carries_vpn=False,
         )
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         assert "tun0" in captured.out
         assert "10.2.0.2" in captured.out
@@ -259,7 +259,7 @@ class TestFormatOutput:
     def test_dns_leak_status_ok(self, capsys: CaptureFixture[str]) -> None:
         """Test display of OK status."""
         from display import format_output
-        
+
         interface = InterfaceInfo(
             name="tun0",
             interface_type=str(InterfaceType.VPN),
@@ -278,16 +278,16 @@ class TestFormatOutput:
             vpn_server_ip=None,
             carries_vpn=False,
         )
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         assert "OK" in captured.out
 
     def test_dns_leak_status_leak(self, capsys: CaptureFixture[str]) -> None:
         """Test display of LEAK status - shown by YELLOW row color."""
         from display import format_output
-        
+
         interface = InterfaceInfo(
             name="eth0",
             interface_type=str(InterfaceType.ETHERNET),
@@ -306,9 +306,9 @@ class TestFormatOutput:
             vpn_server_ip=None,
             carries_vpn=False,
         )
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         # DNS leak status shown by YELLOW color on the row
         assert "\033[93m" in captured.out  # YELLOW color code
@@ -318,11 +318,11 @@ class TestFormatOutput:
     def test_data_marker_display(self, capsys: CaptureFixture[str]) -> None:
         """Test display of DataMarker values."""
         from display import format_output
-        
+
         interface = InterfaceInfo.create_empty("eth0")
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         # Should show N/A or -- for not available fields
         assert "N/A" in captured.out or "--" in captured.out
@@ -334,7 +334,7 @@ class TestComplexScenarios:
     def test_vpn_with_leak_scenario(self, capsys: CaptureFixture[str]) -> None:
         """Test display of VPN active with DNS leak on physical interface."""
         from display import format_output
-        
+
         interfaces = [
             InterfaceInfo(
                 name="eth0",
@@ -373,9 +373,9 @@ class TestComplexScenarios:
                 carries_vpn=False,
             ),
         ]
-        
+
         format_output(interfaces)
-        
+
         captured = capsys.readouterr()
         # Check for both YELLOW (leak) and GREEN (VPN with OK DNS) colors
         assert "\033[93m" in captured.out  # YELLOW for DNS leak
@@ -385,7 +385,7 @@ class TestComplexScenarios:
     def test_dual_stack_scenario(self, capsys: CaptureFixture[str]) -> None:
         """Test display of dual-stack (IPv4 + IPv6) interface."""
         from display import format_output
-        
+
         interface = InterfaceInfo(
             name="eth0",
             interface_type=str(InterfaceType.ETHERNET),
@@ -404,9 +404,9 @@ class TestComplexScenarios:
             vpn_server_ip=None,
             carries_vpn=False,
         )
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         assert "192.168.1.100" in captured.out
         assert "2001:db8" in captured.out
@@ -418,7 +418,7 @@ class TestEdgeCases:
     def test_many_interfaces(self, capsys: CaptureFixture[str]) -> None:
         """Test display with many interfaces."""
         from display import format_output
-        
+
         interfaces = []
         for i in range(20):
             interfaces.append(
@@ -441,9 +441,9 @@ class TestEdgeCases:
                     carries_vpn=False,
                 )
             )
-        
+
         format_output(interfaces)
-        
+
         captured = capsys.readouterr()
         # Should handle many interfaces without crashing
         assert "eth0" in captured.out
@@ -452,7 +452,7 @@ class TestEdgeCases:
     def test_long_values(self, capsys: CaptureFixture[str]) -> None:
         """Test handling of very long values."""
         from display import format_output
-        
+
         interface = InterfaceInfo(
             name="verylonginterfacename0",
             interface_type=str(InterfaceType.ETHERNET),
@@ -471,9 +471,9 @@ class TestEdgeCases:
             vpn_server_ip=None,
             carries_vpn=False,
         )
-        
+
         format_output([interface])
-        
+
         captured = capsys.readouterr()
         # Should not crash with long values
         assert len(captured.out) > 0

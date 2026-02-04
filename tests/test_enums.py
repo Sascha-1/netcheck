@@ -21,7 +21,7 @@ from enums import InterfaceType, DnsLeakStatus, DataMarker
 
 class TestInterfaceType:
     """Test InterfaceType enum."""
-    
+
     def test_values(self) -> None:
 
         """Test that enum values are correct."""
@@ -29,13 +29,13 @@ class TestInterfaceType:
         assert InterfaceType.ETHERNET.value == "ethernet"
         assert InterfaceType.WIRELESS.value == "wireless"
         assert InterfaceType.VPN.value == "vpn"
-    
+
     def test_string_conversion(self) -> None:
 
         """Test that enum converts to string correctly."""
         assert str(InterfaceType.ETHERNET) == "ethernet"
         assert str(InterfaceType.VPN) == "vpn"
-    
+
     def test_all_types_present(self) -> None:
 
         """Test that all expected types are defined."""
@@ -49,7 +49,7 @@ class TestInterfaceType:
 
 class TestDnsLeakStatus:
     """Test DnsLeakStatus enum."""
-    
+
     def test_values(self) -> None:
 
         """Test that status values are correct."""
@@ -57,7 +57,7 @@ class TestDnsLeakStatus:
         assert DnsLeakStatus.LEAK.value == "LEAK"
         assert DnsLeakStatus.WARN.value == "WARN"
         assert DnsLeakStatus.NOT_APPLICABLE.value == "--"
-    
+
     def test_string_conversion(self) -> None:
 
         """Test string conversion."""
@@ -67,7 +67,7 @@ class TestDnsLeakStatus:
 
 class TestDataMarker:
     """Test DataMarker enum."""
-    
+
     def test_values(self) -> None:
 
         """Test marker values."""
@@ -76,7 +76,7 @@ class TestDataMarker:
         assert DataMarker.NONE_VALUE.value == "NONE"
         assert DataMarker.DEFAULT.value == "DEFAULT"
         assert DataMarker.ERROR.value == "ERR"
-    
+
     def test_string_conversion(self) -> None:
 
         """Test string conversion."""

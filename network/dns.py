@@ -11,7 +11,7 @@ No elevated privileges required.
 
 import subprocess
 import threading
-from typing import List, Tuple, Optional, Dict, TYPE_CHECKING
+from typing import List, Tuple, Optional, Dict, Set, TYPE_CHECKING
 
 from logging_config import get_logger
 from config import (
@@ -84,6 +84,26 @@ def _extract_current_dns(lines: List[str]) -> Optional[str]:
                 ips = _extract_ips_from_text(dns_part)
                 return ips[0] if ips else None
     return None
+
+
+def _check_dns_overlap(configured: List[str], reference_set: Set[str]) -> Optional[List[str]]:
+    """
+    Check if any configured DNS servers overlap with reference set.
+    
+    FIXED: Returns None (not empty list) when there's no overlap.
+    
+    Args:
+        configured: List of configured DNS servers
+        reference_set: Set of reference DNS servers to check against
+        
+    Returns:
+        List of overlapping DNS servers, or None if no overlap
+    """
+    if not configured or not reference_set:
+        return None
+    
+    overlapping = [dns for dns in configured if dns in reference_set]
+    return overlapping if overlapping else None
 
 
 def _check_isp_dns_leak(configured_dns: List[str], isp_dns: List[str]) -> Optional[List[str]]:

@@ -35,7 +35,8 @@ COMMON_VPN_PORTS = {
     51820: "WireGuard",
     1194: "OpenVPN (UDP default)",
     1195: "OpenVPN (TCP alternate)",
-    443: "HTTPS/OpenVPN/SSTP",
+    # Port 443 removed - too generic (HTTPS, CDNs, Google services, etc.)
+    # Causes false positives in VPN endpoint detection
     500: "IKEv2/IPSec",
     4500: "IKEv2/IPSec NAT-T",
 }
@@ -102,7 +103,7 @@ TABLE_COLUMNS = [
 class Colors:
     """
     Terminal color codes for interface status visualization.
-    
+
     Color scheme:
         GREEN: VPN tunnel endpoint (encrypted, secure) or DNS OK
         CYAN: Physical interface carrying VPN traffic (underlay)

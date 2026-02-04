@@ -44,9 +44,9 @@ def caplog_debug(caplog: LogCaptureFixture) -> LogCaptureFixture:
 def mock_sysfs_base(tmp_path: Path) -> Path:
     """
     Create base mock sysfs filesystem structure.
-    
+
     Creates /sys/class/net directory structure for testing.
-    
+
     Returns:
         Path to mock /sys/class/net directory
     """
@@ -59,26 +59,26 @@ def mock_sysfs_base(tmp_path: Path) -> Path:
 def mock_sysfs_ethernet(mock_sysfs_base: Path, tmp_path: Path) -> Path:
     """
     Create mock Ethernet interface (eth0) with PCI device.
-    
+
     Returns:
         Path to eth0 interface directory
     """
     # Create eth0 interface
     eth0 = mock_sysfs_base / "eth0"
     eth0.mkdir()
-    
+
     # Create mock PCI device
     pci_device = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:1f.6"
     pci_device.mkdir(parents=True)
     (pci_device / "vendor").write_text("0x8086\n")
     (pci_device / "device").write_text("0x15d7\n")
-    
+
     # Link interface to device
     (eth0 / "device").symlink_to(pci_device)
-    
+
     # Create type file
     (eth0 / "type").write_text("1\n")  # Ethernet type
-    
+
     return eth0
 
 
@@ -86,26 +86,26 @@ def mock_sysfs_ethernet(mock_sysfs_base: Path, tmp_path: Path) -> Path:
 def mock_sysfs_wireless(mock_sysfs_base: Path, tmp_path: Path) -> Path:
     """
     Create mock wireless interface (wlan0) with PCI device and phy80211.
-    
+
     Returns:
         Path to wlan0 interface directory
     """
     # Create wlan0 interface
     wlan0 = mock_sysfs_base / "wlan0"
     wlan0.mkdir()
-    
+
     # Create mock PCI device
     pci_device = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:14.3"
     pci_device.mkdir(parents=True)
     (pci_device / "vendor").write_text("0x8086\n")
     (pci_device / "device").write_text("0x2723\n")
-    
+
     # Link interface to device
     (wlan0 / "device").symlink_to(pci_device)
-    
+
     # Create phy80211 marker
     (wlan0 / "phy80211").mkdir()
-    
+
     return wlan0
 
 
@@ -113,33 +113,33 @@ def mock_sysfs_wireless(mock_sysfs_base: Path, tmp_path: Path) -> Path:
 def mock_sysfs_usb_tether(mock_sysfs_base: Path, tmp_path: Path) -> Path:
     """
     Create mock USB tethered device (usb0).
-    
+
     Returns:
         Path to usb0 interface directory
     """
     # Create usb0 interface
     usb0 = mock_sysfs_base / "usb0"
     usb0.mkdir()
-    
+
     # Create mock USB device path
     usb_device = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:14.0" / "usb3" / "3-1"
     usb_device.mkdir(parents=True)
-    
+
     # USB IDs
     (usb_device / "idVendor").write_text("18d1\n")
     (usb_device / "idProduct").write_text("4eeb\n")
     (usb_device / "manufacturer").write_text("Google Inc.\n")
     (usb_device / "product").write_text("Pixel 9a\n")
-    
+
     # Create driver link
     driver_path = usb_device / "driver"
     driver_target = tmp_path / "sys" / "bus" / "usb" / "drivers" / "rndis_host"
     driver_target.mkdir(parents=True)
     driver_path.symlink_to(driver_target)
-    
+
     # Link interface to USB device
     (usb0 / "device").symlink_to(usb_device)
-    
+
     return usb0
 
 
@@ -147,7 +147,7 @@ def mock_sysfs_usb_tether(mock_sysfs_base: Path, tmp_path: Path) -> Path:
 def mock_sysfs_vpn(mock_sysfs_base: Path) -> Path:
     """
     Create mock VPN interface (tun0) - virtual, no device.
-    
+
     Returns:
         Path to tun0 interface directory
     """
@@ -161,7 +161,7 @@ def mock_sysfs_vpn(mock_sysfs_base: Path) -> Path:
 def mock_sysfs_loopback(mock_sysfs_base: Path) -> Path:
     """
     Create mock loopback interface (lo).
-    
+
     Returns:
         Path to lo interface directory
     """
@@ -254,12 +254,12 @@ udp   ESTAB  0      0      10.2.0.2:54322      10.2.0.1:53"""
 def mock_run_command() -> Generator[Mock, None, None]:
     """
     Mock the run_command function from utils.system.
-    
+
     Usage in tests:
         def test_something(mock_run_command):
             mock_run_command.return_value = "output"
             # test code here
-    
+
     Yields:
         Mock object for run_command
     """
@@ -271,7 +271,7 @@ def mock_run_command() -> Generator[Mock, None, None]:
 def mock_requests_get() -> Generator[Mock, None, None]:
     """
     Mock requests.get for API testing.
-    
+
     Yields:
         Mock object for requests.get
     """
@@ -283,7 +283,7 @@ def mock_requests_get() -> Generator[Mock, None, None]:
 def mock_subprocess_run() -> Generator[Mock, None, None]:
     """
     Mock subprocess.run for testing command execution.
-    
+
     Yields:
         Mock object for subprocess.run
     """
@@ -299,7 +299,7 @@ def mock_subprocess_run() -> Generator[Mock, None, None]:
 def sample_interface_info() -> InterfaceInfo:
     """
     Create a sample InterfaceInfo object for testing.
-    
+
     Returns:
         InterfaceInfo with realistic sample data
     """
@@ -325,7 +325,7 @@ def sample_interface_info() -> InterfaceInfo:
 def sample_vpn_interface_info() -> InterfaceInfo:
     """
     Create a sample VPN InterfaceInfo object.
-    
+
     Returns:
         InterfaceInfo for a VPN interface
     """
@@ -351,7 +351,7 @@ def sample_vpn_interface_info() -> InterfaceInfo:
 def sample_egress_info() -> EgressInfo:
     """
     Create a sample EgressInfo object.
-    
+
     Returns:
         EgressInfo with realistic data
     """
@@ -367,7 +367,7 @@ def sample_egress_info() -> EgressInfo:
 def sample_interface_list() -> List[InterfaceInfo]:
     """
     Create a list of sample InterfaceInfo objects.
-    
+
     Returns:
         List of InterfaceInfo objects representing typical system
     """

@@ -16,9 +16,9 @@ class TestArgumentParsing:
     def test_parse_args_defaults(self) -> None:
         """Test default argument values when no flags provided."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.verbose is False
         assert args.no_color is False
         assert args.log_file is None
@@ -29,63 +29,63 @@ class TestArgumentParsing:
     def test_parse_args_verbose_short(self) -> None:
         """Test verbose flag short form."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.verbose is True
 
     @patch('sys.argv', ['netcheck.py', '--verbose'])
     def test_parse_args_verbose_long(self) -> None:
         """Test verbose flag long form."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.verbose is True
 
     @patch('sys.argv', ['netcheck.py', '--no-color'])
     def test_parse_args_no_color(self) -> None:
         """Test no-color flag."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.no_color is True
 
     @patch('sys.argv', ['netcheck.py', '--log-file', '/tmp/test.log'])
     def test_parse_args_log_file(self) -> None:
         """Test log-file argument."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.log_file == Path('/tmp/test.log')
 
     @patch('sys.argv', ['netcheck.py', '--export', 'json'])
     def test_parse_args_export_json(self) -> None:
         """Test export json format."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.export == 'json'
 
     @patch('sys.argv', ['netcheck.py', '--export', 'csv'])
     def test_parse_args_export_csv(self) -> None:
         """Test export csv format."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.export == 'csv'
 
     @patch('sys.argv', ['netcheck.py', '--export', 'json', '--output', '/tmp/output.json'])
     def test_parse_args_export_with_output(self) -> None:
         """Test export with output file."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.export == 'json'
         assert args.output == Path('/tmp/output.json')
 
@@ -93,9 +93,9 @@ class TestArgumentParsing:
     def test_parse_args_all_flags_combined(self) -> None:
         """Test all command-line flags together."""
         from netcheck import parse_arguments
-        
+
         args = parse_arguments()
-        
+
         assert args.verbose is True
         assert args.no_color is True
         assert args.log_file == Path('/var/log/netcheck.log')
@@ -104,10 +104,10 @@ class TestArgumentParsing:
     def test_parse_args_help_exits(self) -> None:
         """Test that --help causes exit."""
         from netcheck import parse_arguments
-        
+
         with pytest.raises(SystemExit) as exc_info:
             parse_arguments()
-        
+
         assert exc_info.value.code == 0
 
 
@@ -128,12 +128,12 @@ class TestMainExecution:
         """Test main execution with no network interfaces."""
         mock_check_deps.return_value = True
         mock_collect.return_value = []
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py']):
             main()  # Returns None
-        
+
         mock_collect.assert_called_once()
         mock_format.assert_called_once_with([])
 
@@ -150,7 +150,7 @@ class TestMainExecution:
     ) -> None:
         """Test main execution with network interfaces."""
         mock_check_deps.return_value = True
-        
+
         test_interface = InterfaceInfo(
             name="eth0",
             interface_type=InterfaceType.ETHERNET,
@@ -170,12 +170,12 @@ class TestMainExecution:
             carries_vpn=False,
         )
         mock_collect.return_value = [test_interface]
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py']):
             main()
-        
+
         mock_collect.assert_called_once()
         mock_format.assert_called_once()
 
@@ -188,13 +188,13 @@ class TestMainExecution:
     ) -> None:
         """Test main exits when dependencies missing."""
         mock_check_deps.return_value = False
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py']):
             with pytest.raises(SystemExit) as exc_info:
                 main()
-        
+
         assert exc_info.value.code == 1
 
     @patch('netcheck.collect_network_data')
@@ -209,15 +209,15 @@ class TestMainExecution:
         """Test JSON export to stdout."""
         mock_check_deps.return_value = True
         mock_collect.return_value = []
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py', '--export', 'json']):
             with patch('netcheck.export_to_json') as mock_export:
                 mock_export.return_value = '{"test": "data"}'
                 with patch('builtins.print') as mock_print:
                     main()
-                
+
                 mock_export.assert_called_once()
                 mock_print.assert_called_once()
 
@@ -233,15 +233,15 @@ class TestMainExecution:
         """Test CSV export to stdout."""
         mock_check_deps.return_value = True
         mock_collect.return_value = []
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py', '--export', 'csv']):
             with patch('netcheck.export_to_csv') as mock_export:
                 mock_export.return_value = 'name,type\neth0,ethernet\n'
                 with patch('builtins.print') as mock_print:
                     main()
-                
+
                 mock_export.assert_called_once()
                 mock_print.assert_called_once()
 
@@ -258,15 +258,15 @@ class TestMainExecution:
         """Test JSON export to file."""
         mock_check_deps.return_value = True
         mock_collect.return_value = []
-        
+
         output_file = tmp_path / "test.json"
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py', '--export', 'json', '--output', str(output_file)]):
             with patch('netcheck.save_json') as mock_save:
                 main()
-                
+
                 mock_save.assert_called_once_with([], str(output_file))
 
     @patch('netcheck.setup_logging')
@@ -276,11 +276,11 @@ class TestMainExecution:
     ) -> None:
         """Test that --output requires --export."""
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py', '--output', '/tmp/test.json']):
             with pytest.raises(SystemExit) as exc_info:
                 main()
-        
+
         assert exc_info.value.code == 1
 
 
@@ -301,12 +301,12 @@ class TestLoggingSetup:
         """Test logging setup with verbose flag."""
         mock_check_deps.return_value = True
         mock_collect.return_value = []
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py', '-v']):
             main()
-        
+
         mock_setup.assert_called_once()
         call_kwargs = mock_setup.call_args.kwargs
         assert call_kwargs['verbose'] is True
@@ -325,12 +325,12 @@ class TestLoggingSetup:
         """Test logging setup with no-color flag."""
         mock_check_deps.return_value = True
         mock_collect.return_value = []
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py', '--no-color']):
             main()
-        
+
         mock_setup.assert_called_once()
         call_kwargs = mock_setup.call_args.kwargs
         assert call_kwargs['use_colors'] is False
@@ -352,7 +352,7 @@ class TestIntegration:
     ) -> None:
         """Test complete workflow with VPN active."""
         mock_check_deps.return_value = True
-        
+
         eth0 = InterfaceInfo(
             name="eth0",
             interface_type=InterfaceType.ETHERNET,
@@ -371,7 +371,7 @@ class TestIntegration:
             vpn_server_ip=None,
             carries_vpn=False,
         )
-        
+
         tun0 = InterfaceInfo(
             name="tun0",
             interface_type=InterfaceType.VPN,
@@ -390,12 +390,12 @@ class TestIntegration:
             vpn_server_ip="10.2.0.1",
             carries_vpn=False,
         )
-        
+
         mock_collect.return_value = [eth0, tun0]
-        
+
         from netcheck import main
-        
+
         with patch('sys.argv', ['netcheck.py']):
             main()
-        
+
         mock_format.assert_called_once_with([eth0, tun0])
