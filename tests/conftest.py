@@ -3,13 +3,15 @@ Pytest configuration and shared fixtures.
 
 Provides comprehensive fixtures for mocking system components and creating
 test data throughout the test suite.
+
+ENHANCED: Full type annotations for strict mypy compliance.
 """
 
 import pytest
-from pathlib import Path
-from typing import Generator, List
-from unittest.mock import Mock, patch, MagicMock
 import logging
+from pathlib import Path
+from typing import Generator, List, Dict, Any
+from unittest.mock import Mock, patch, MagicMock
 
 # Type imports for fixtures
 from _pytest.logging import LogCaptureFixture
@@ -50,7 +52,7 @@ def mock_sysfs_base(tmp_path: Path) -> Path:
     Returns:
         Path to mock /sys/class/net directory
     """
-    sysfs_net = tmp_path / "sys" / "class" / "net"
+    sysfs_net: Path = tmp_path / "sys" / "class" / "net"
     sysfs_net.mkdir(parents=True)
     return sysfs_net
 
@@ -64,11 +66,11 @@ def mock_sysfs_ethernet(mock_sysfs_base: Path, tmp_path: Path) -> Path:
         Path to eth0 interface directory
     """
     # Create eth0 interface
-    eth0 = mock_sysfs_base / "eth0"
+    eth0: Path = mock_sysfs_base / "eth0"
     eth0.mkdir()
 
     # Create mock PCI device
-    pci_device = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:1f.6"
+    pci_device: Path = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:1f.6"
     pci_device.mkdir(parents=True)
     (pci_device / "vendor").write_text("0x8086\n")
     (pci_device / "device").write_text("0x15d7\n")
@@ -91,11 +93,11 @@ def mock_sysfs_wireless(mock_sysfs_base: Path, tmp_path: Path) -> Path:
         Path to wlan0 interface directory
     """
     # Create wlan0 interface
-    wlan0 = mock_sysfs_base / "wlan0"
+    wlan0: Path = mock_sysfs_base / "wlan0"
     wlan0.mkdir()
 
     # Create mock PCI device
-    pci_device = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:14.3"
+    pci_device: Path = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:14.3"
     pci_device.mkdir(parents=True)
     (pci_device / "vendor").write_text("0x8086\n")
     (pci_device / "device").write_text("0x2723\n")
@@ -118,11 +120,11 @@ def mock_sysfs_usb_tether(mock_sysfs_base: Path, tmp_path: Path) -> Path:
         Path to usb0 interface directory
     """
     # Create usb0 interface
-    usb0 = mock_sysfs_base / "usb0"
+    usb0: Path = mock_sysfs_base / "usb0"
     usb0.mkdir()
 
     # Create mock USB device path
-    usb_device = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:14.0" / "usb3" / "3-1"
+    usb_device: Path = tmp_path / "sys" / "devices" / "pci0000:00" / "0000:00:14.0" / "usb3" / "3-1"
     usb_device.mkdir(parents=True)
 
     # USB IDs
@@ -132,8 +134,8 @@ def mock_sysfs_usb_tether(mock_sysfs_base: Path, tmp_path: Path) -> Path:
     (usb_device / "product").write_text("Pixel 9a\n")
 
     # Create driver link
-    driver_path = usb_device / "driver"
-    driver_target = tmp_path / "sys" / "bus" / "usb" / "drivers" / "rndis_host"
+    driver_path: Path = usb_device / "driver"
+    driver_target: Path = tmp_path / "sys" / "bus" / "usb" / "drivers" / "rndis_host"
     driver_target.mkdir(parents=True)
     driver_path.symlink_to(driver_target)
 
@@ -151,7 +153,7 @@ def mock_sysfs_vpn(mock_sysfs_base: Path) -> Path:
     Returns:
         Path to tun0 interface directory
     """
-    tun0 = mock_sysfs_base / "tun0"
+    tun0: Path = mock_sysfs_base / "tun0"
     tun0.mkdir()
     # VPN interfaces have no device symlink
     return tun0
@@ -165,7 +167,7 @@ def mock_sysfs_loopback(mock_sysfs_base: Path) -> Path:
     Returns:
         Path to lo interface directory
     """
-    lo = mock_sysfs_base / "lo"
+    lo: Path = mock_sysfs_base / "lo"
     lo.mkdir()
     (lo / "type").write_text("772\n")  # Loopback type
     return lo
@@ -256,7 +258,7 @@ def mock_run_command() -> Generator[Mock, None, None]:
     Mock the run_command function from utils.system.
 
     Usage in tests:
-        def test_something(mock_run_command):
+        def test_something(mock_run_command: MagicMock) -> None:
             mock_run_command.return_value = "output"
             # test code here
 

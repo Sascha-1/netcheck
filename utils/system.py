@@ -8,9 +8,9 @@ IMPROVEMENTS:
 - Command injection prevention (Fix #1)
 - Log injection prevention (Fix #2)
 - IPv6 validation bug fix (Fix #4)
-- Performance caching
 - FIXED: sanitize_for_log newline and ANSI handling
 - FIXED: validate_interface_name newline rejection
+- UPDATED: Removed caching from IP validation functions (one-shot CLI tool)
 
 Security:
     All functions safe for unprivileged use (no sudo required)
@@ -18,7 +18,6 @@ Security:
 
 import re
 import subprocess
-from functools import cache
 from typing import Any, Optional
 from config import TIMEOUT_SECONDS
 
@@ -159,15 +158,12 @@ def run_command(cmd: list[str]) -> Optional[str]:
 # IP Validation (with IPv6 bug fix)
 # ============================================================================
 
-@cache
-def is_valid_ipv4(address: str) -> bool:
+def is_valid_ipv4(address: Optional[str]) -> bool:
     """
     Validate if string is a valid IPv4 address.
 
-    Cached for performance when checking same addresses repeatedly.
-
     Args:
-        address: String to validate
+        address: String to validate (or None)
 
     Returns:
         True if valid IPv4 address, False otherwise
@@ -187,12 +183,11 @@ def is_valid_ipv4(address: str) -> bool:
     return all(0 <= octet <= 255 for octet in octets)
 
 
-@cache
-def is_valid_ipv6(address: str) -> bool:
+def is_valid_ipv6(address: Optional[str]) -> bool:
     """
     Validate if string is a valid IPv6 address.
 
-    FIXED (Issue #4): Line 157 bug - `if address == ':'` → `if address == '::'`
+    FIXED (Issue #4): Line 157 bug - `if address == ':'` â†’ `if address == '::'`
 
     Handles:
     - Full IPv6 addresses (2001:0db8:0000:0000:0000:0000:0000:0001)
@@ -200,10 +195,8 @@ def is_valid_ipv6(address: str) -> bool:
     - IPv4-mapped IPv6 (::ffff:192.0.2.1, ::192.0.2.1)
     - Link-local addresses (fe80::1)
 
-    Cached for performance when checking same addresses repeatedly.
-
     Args:
-        address: String to validate
+        address: String to validate (or None)
 
     Returns:
         True if valid IPv6 address, False otherwise
@@ -223,22 +216,38 @@ def is_valid_ipv6(address: str) -> bool:
 
     # Check for IPv4-mapped IPv6 (e.g., ::ffff:192.0.2.1 or ::192.0.2.1)
     if '.' in address:
-        # Split on last occurrence of ':'
-        parts = address.rsplit(':', 1)
-        if len(parts) == 2:
-            ipv6_part, ipv4_part = parts
+        # Use regex to extract IPv4 from the end
+        import re
+        ipv4_pattern = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$'
+        match = re.search(ipv4_pattern, address)
+        
+        if match:
+            ipv4_part = match.group(1)
             # Validate the IPv4 part
             if not is_valid_ipv4(ipv4_part):
                 return False
+            
+            # Get the IPv6 part (everything before the IPv4)
+            ipv6_part = address[:match.start()]
+            
+            # Remove trailing colon if present (but not if it's part of ::)
+            if ipv6_part.endswith(':') and not ipv6_part.endswith('::'):
+                ipv6_part = ipv6_part[:-1]
+            
+            # FIXED: Special case handling for :: prefix
+            if ipv6_part == ':' or ipv6_part == '':
+                # This means the address was like ::192.0.2.1
+                # The :: represents the compressed zeros, which is valid
+                return True
+            
+            if ipv6_part == '::':
+                return True
+            
             # Continue validating the IPv6 part
             address = ipv6_part
-            # FIXED (Issue #4): Changed from `if address == ':'` to `if address == '::'`
-            # Special case: if IPv6 part is just "::", it's valid (e.g., ::192.0.2.1)
-            if address == '::':
-                return True
-            # Empty IPv6 part also valid (e.g., "::1" parsed as "" and "::1")
-            if not address:
-                return False
+        else:
+            # Has dots but no valid IPv4 pattern at end - invalid
+            return False
 
     # Check for multiple :: (only one compression allowed)
     if address.count('::') > 1:
@@ -285,15 +294,12 @@ def is_valid_ipv6(address: str) -> bool:
     return True
 
 
-@cache
-def is_valid_ip(address: str) -> bool:
+def is_valid_ip(address: Optional[str]) -> bool:
     """
     Validate if string is a valid IP address (IPv4 or IPv6).
 
-    Cached for performance when checking same addresses repeatedly.
-
     Args:
-        address: String to validate
+        address: String to validate (or None)
 
     Returns:
         True if valid IP address, False otherwise

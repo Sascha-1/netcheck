@@ -5,14 +5,14 @@ Handles all output formatting and text manipulation for terminal display.
 All data cleaning happens here at display time.
 
 IMPROVED: Handles enums directly without needing str() conversions.
+UPDATED: Removed unnecessary LRU caching from cleanup functions.
 """
 
 import re
 from typing import List, Dict
-from functools import lru_cache
 
 from models import InterfaceInfo
-from config import TABLE_COLUMNS, DEVICE_NAME_CLEANUP, Colors, COLUMN_SEPARATOR, CACHE_SIZE
+from config import TABLE_COLUMNS, DEVICE_NAME_CLEANUP, Colors, COLUMN_SEPARATOR
 from enums import DataMarker, DnsLeakStatus, InterfaceType
 
 
@@ -20,7 +20,6 @@ PARENTHESES_PATTERN = re.compile(r'\([^)]*\)')
 BRACKETS_PATTERN = re.compile(r'\[[^\]]*\]')
 
 
-@lru_cache(maxsize=CACHE_SIZE)
 def cleanup_device_name(device_name: str) -> str:
     """
     Clean device name by removing generic terms and technical jargon.
@@ -33,8 +32,6 @@ def cleanup_device_name(device_name: str) -> str:
 
     All removals are case-insensitive. Terms are processed longest-first
     to prevent partial matches.
-
-    Cached with LRU cache for performance.
     """
     cleaned = device_name
 
@@ -53,13 +50,11 @@ def cleanup_device_name(device_name: str) -> str:
     return cleaned if cleaned else device_name
 
 
-@lru_cache(maxsize=CACHE_SIZE)
 def cleanup_isp_name(isp: str) -> str:
     """
     Clean ISP name by removing ASN prefix.
 
     Format is often "AS12345 ISP Name" - we want just the name.
-    Cached with LRU cache for performance.
     """
     if isp and isp.startswith("AS") and len(parts := isp.split()) > 1:
         return " ".join(parts[1:])
