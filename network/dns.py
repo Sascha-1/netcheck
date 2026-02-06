@@ -139,7 +139,7 @@ def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
         Tuple of (all_dns_servers, current_dns_server)
     """
     safe_name = sanitize_for_log(iface_name)
-    logger.debug(f"[{safe_name}] Querying DNS configuration")
+    logger.debug("[%s] Querying DNS configuration", safe_name)
 
     with _dns_query_lock:
         try:
@@ -152,7 +152,7 @@ def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
             )
 
             if result.returncode != 0:
-                logger.debug(f"[{safe_name}] resolvectl query failed")
+                logger.debug("[%s] resolvectl query failed", safe_name)
                 return [], None
 
             lines = result.stdout.split('\n')
@@ -168,22 +168,23 @@ def get_interface_dns(iface_name: str) -> Tuple[List[str], Optional[str]]:
             if dns_servers:
                 if current_dns:
                     safe_current = sanitize_for_log(current_dns)
-                    logger.debug(f"[{safe_name}] DNS servers: {', '.join(dns_servers)} (current: {safe_current})")
+                    logger.debug("[%s] DNS servers: %s (current: %s)",
+                               safe_name, ", ".join(dns_servers), safe_current)
                 else:
-                    logger.debug(f"[{safe_name}] DNS servers: {', '.join(dns_servers)}")
+                    logger.debug("[%s] DNS servers: %s", safe_name, ", ".join(dns_servers))
             else:
-                logger.debug(f"[{safe_name}] No DNS servers configured")
+                logger.debug("[%s] No DNS servers configured", safe_name)
 
             return dns_servers, current_dns
 
         except subprocess.TimeoutExpired:
-            logger.warning(f"[{safe_name}] resolvectl timeout")
+            logger.warning("[%s] resolvectl timeout", safe_name)
             return [], None
         except FileNotFoundError:
             logger.error("resolvectl not found (systemd-resolved not installed)")
             return [], None
         except Exception as e:
-            logger.error(f"[{safe_name}] Failed to get DNS: {e}")
+            logger.error("[%s] Failed to get DNS: %s", safe_name, e)
             return [], None
 
 
@@ -234,7 +235,7 @@ def get_system_dns() -> List[str]:
             dns_servers = _parse_dns_section(global_lines)
 
             if dns_servers:
-                logger.debug(f"System-wide DNS: {', '.join(dns_servers)}")
+                logger.debug("System-wide DNS: %s", ", ".join(dns_servers))
             else:
                 logger.debug("System-wide DNS: None configured")
 
@@ -247,7 +248,7 @@ def get_system_dns() -> List[str]:
             logger.error("System DNS: resolvectl not found")
             return []
         except Exception as e:
-            logger.error(f"System DNS: Failed to query: {e}")
+            logger.error("System DNS: Failed to query: %s", e)
             return []
 
 
@@ -272,21 +273,21 @@ def detect_dns_leak(interface_name: str,
     if not configured_dns:
         return str(DnsLeakStatus.NOT_APPLICABLE)
 
-    logger.debug(f"[{safe_name}] Checking configured DNS: {configured_dns}")
+    logger.debug("[%s] Checking configured DNS: %s", safe_name, configured_dns)
 
     if leaking_dns := _check_isp_dns_leak(configured_dns, isp_dns):
-        logger.warning(f"[{safe_name}] LEAK: Configured with ISP DNS {leaking_dns}")
+        logger.warning("[%s] LEAK: Configured with ISP DNS %s", safe_name, leaking_dns)
         return str(DnsLeakStatus.LEAK)
 
     if vpn_configured := _check_vpn_dns_usage(configured_dns, vpn_dns):
-        logger.debug(f"[{safe_name}] OK: Configured with VPN DNS {vpn_configured}")
+        logger.debug("[%s] OK: Configured with VPN DNS %s", safe_name, vpn_configured)
         return str(DnsLeakStatus.OK)
 
     if public_configured := _check_public_dns_usage(configured_dns):
-        logger.debug(f"[{safe_name}] OK: Using public DNS {public_configured}")
+        logger.debug("[%s] OK: Using public DNS %s", safe_name, public_configured)
         return str(DnsLeakStatus.OK)
 
-    logger.warning(f"[{safe_name}] WARN: Using unknown DNS {configured_dns}")
+    logger.warning("[%s] WARN: Using unknown DNS %s", safe_name, configured_dns)
     return str(DnsLeakStatus.WARN)
 
 
@@ -321,9 +322,9 @@ def check_dns_leaks_all_interfaces(interfaces: List["InterfaceInfo"]) -> None:
     vpn_dns, isp_dns = collect_dns_servers_by_category(interfaces)
 
     if vpn_dns:
-        logger.debug(f"VPN DNS servers: {', '.join(vpn_dns)}")
+        logger.debug("VPN DNS servers: %s", ", ".join(vpn_dns))
         if isp_dns:
-            logger.debug(f"ISP DNS servers: {', '.join(isp_dns)}")
+            logger.debug("ISP DNS servers: %s", ", ".join(isp_dns))
 
     for interface in interfaces:
         if interface.internal_ipv4 == "N/A":

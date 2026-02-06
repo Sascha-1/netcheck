@@ -53,10 +53,10 @@ def check_dependencies() -> bool:
 
     for cmd in REQUIRED_COMMANDS:
         if not shutil.which(cmd):
-            logger.error(f"Missing: {cmd}")
+            logger.error("Missing: %s", cmd)
             all_present = False
         else:
-            logger.debug(f"Found: {cmd}")
+            logger.debug("Found: %s", cmd)
 
     try:
         import requests
@@ -100,12 +100,12 @@ def process_single_interface(
     IMPROVED: Uses batched IP and route queries for better performance.
     """
     safe_name = sanitize_for_log(iface_name)
-    logger.debug(f"\nProcessing {safe_name}...")
+    logger.debug("\nProcessing %s...", safe_name)
 
     info = InterfaceInfo.create_empty(iface_name)
 
     info.interface_type = detect_interface_type(iface_name)
-    logger.debug(f"Type: {info.interface_type}")
+    logger.debug("Type: %s", info.interface_type)
 
     info.device = get_device_name(iface_name, info.interface_type)
 
@@ -118,7 +118,7 @@ def process_single_interface(
     info.current_dns = current_dns
 
     if len(dns_list) > 1:
-        logger.debug(f"Total DNS servers: {len(dns_list)}")
+        logger.debug("Total DNS servers: %d", len(dns_list))
 
     # IMPROVED: Single route query for both gateway and metric
     info.default_gateway, info.metric = get_route_info(iface_name)
@@ -128,10 +128,10 @@ def process_single_interface(
         info.external_ipv6 = egress.external_ipv6
         info.egress_isp = egress.isp
         info.egress_country = egress.country
-        logger.debug(f"External IPv4: {info.external_ipv4}")
-        logger.debug(f"External IPv6: {info.external_ipv6}")
-        logger.debug(f"ISP: {info.egress_isp}")
-        logger.debug(f"Country: {info.egress_country}")
+        logger.debug("External IPv4: %s", info.external_ipv4)
+        logger.debug("External IPv6: %s", info.external_ipv6)
+        logger.debug("ISP: %s", info.egress_isp)
+        logger.debug("Country: %s", info.egress_country)
 
     return info
 
@@ -159,14 +159,14 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
         logger.warning("No network interfaces found")
         return []
 
-    logger.info(f"Found {len(interfaces)} interfaces: {', '.join(interfaces)}")
+    logger.info("Found %d interfaces: %s", len(interfaces), ", ".join(interfaces))
 
     active_interface = get_active_interface()
     egress = None
 
     if active_interface:
         safe_active = sanitize_for_log(active_interface)
-        logger.info(f"Active interface: {safe_active}")
+        logger.info("Active interface: %s", safe_active)
         logger.info("Querying ipinfo.io for egress information...")
         egress = get_egress_info()
     else:
@@ -180,7 +180,7 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
     results: List[InterfaceInfo] = []
 
     if parallel and len(interfaces) > 1:
-        logger.debug(f"Using parallel processing with {MAX_WORKERS} workers")
+        logger.debug("Using parallel processing with %d workers", MAX_WORKERS)
 
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             future_to_iface = {
@@ -202,7 +202,7 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
                     results.append(result)
                 except Exception as e:
                     safe_iface = sanitize_for_log(iface)
-                    logger.error(f"Failed to process {safe_iface}: {e}")
+                    logger.error("Failed to process %s: %s", safe_iface, e)
                     results.append(InterfaceInfo.create_empty(iface))
 
         # Sort results to match original interface order
@@ -225,7 +225,7 @@ def collect_network_data(parallel: bool = True) -> List[InterfaceInfo]:
                 results.append(info)
             except Exception as e:
                 safe_iface = sanitize_for_log(iface_name)
-                logger.error(f"Failed to process {safe_iface}: {e}")
+                logger.error("Failed to process %s: %s", safe_iface, e)
                 results.append(InterfaceInfo.create_empty(iface_name))
 
     logger.debug("")

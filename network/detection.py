@@ -164,9 +164,9 @@ def get_interface_list() -> list[str]:
             if validate_interface_name(iface):
                 interfaces.append(iface)
             else:
-                logger.warning(f"Invalid interface: {sanitize_for_log(iface)}")
+                logger.warning("Invalid interface: %s", sanitize_for_log(iface))
 
-    logger.debug(f"Found {len(interfaces)} interfaces: {', '.join(interfaces)}")
+    logger.debug("Found %d interfaces: %s", len(interfaces), ", ".join(interfaces))
     return interfaces
 
 
@@ -183,7 +183,7 @@ def is_usb_tethered_device(iface: str) -> bool:
 
     driver = _get_usb_driver(iface)
     if driver and driver in USB_TETHER_DRIVERS:
-        logger.debug(f"[{sanitize_for_log(iface)}] USB tether: {sanitize_for_log(driver)}")
+        logger.debug("[%s] USB tether: %s", sanitize_for_log(iface), sanitize_for_log(driver))
         return True
 
     return False
@@ -205,19 +205,19 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> InterfaceTy
         return InterfaceType.LOOPBACK
 
     if not validate_interface_name(iface_name):
-        logger.error(f"Invalid interface: {sanitize_for_log(iface_name)}")
+        logger.error("Invalid interface: %s", sanitize_for_log(iface_name))
         return InterfaceType.UNKNOWN
 
     if is_usb_tethered_device(iface_name):
-        logger.debug(f"[{sanitize_for_log(iface_name)}] Type: tether")
+        logger.debug("[%s] Type: tether", sanitize_for_log(iface_name))
         return InterfaceType.TETHER
 
     if "vpn" in iface_name.lower():
-        logger.debug(f"[{sanitize_for_log(iface_name)}] Type: VPN")
+        logger.debug("[%s] Type: VPN", sanitize_for_log(iface_name))
         return InterfaceType.VPN
 
     if _is_wireless(iface_name):
-        logger.debug(f"[{sanitize_for_log(iface_name)}] Type: wireless")
+        logger.debug("[%s] Type: wireless", sanitize_for_log(iface_name))
         return InterfaceType.WIRELESS
 
     output = run_command(["ip", "-d", "link", "show", iface_name])
@@ -225,11 +225,11 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> InterfaceTy
         output_lower = output.lower()
 
         if "wireguard" in output_lower:
-            logger.debug(f"[{sanitize_for_log(iface_name)}] Type: VPN (WireGuard)")
+            logger.debug("[%s] Type: VPN (WireGuard)", sanitize_for_log(iface_name))
             return InterfaceType.VPN
 
         if "tun" in output_lower or "tap" in output_lower:
-            logger.debug(f"[{sanitize_for_log(iface_name)}] Type: VPN (TUN/TAP)")
+            logger.debug("[%s] Type: VPN (TUN/TAP)", sanitize_for_log(iface_name))
             return InterfaceType.VPN
 
         if "veth" in output_lower:
@@ -240,10 +240,10 @@ def detect_interface_type(iface_name: str, verbose: bool = False) -> InterfaceTy
 
     for prefix, iface_type in INTERFACE_TYPE_PATTERNS.items():
         if iface_name.startswith(prefix):
-            logger.debug(f"[{sanitize_for_log(iface_name)}] Type: {iface_type}")
+            logger.debug("[%s] Type: %s", sanitize_for_log(iface_name), iface_type)
             return InterfaceType(iface_type)
 
-    logger.warning(f"[{sanitize_for_log(iface_name)}] Type: unknown")
+    logger.warning("[%s] Type: unknown", sanitize_for_log(iface_name))
     return InterfaceType.UNKNOWN
 
 
@@ -274,7 +274,7 @@ def get_pci_device_name(iface: str) -> str | None:
 
     if len(parts := lines[0].split(':', 2)) >= 3:
         device_name = parts[2].strip()
-        logger.debug(f"[{sanitize_for_log(iface)}] Device: {sanitize_for_log(device_name)}")
+        logger.debug("[%s] Device: %s", sanitize_for_log(iface), sanitize_for_log(device_name))
         return device_name
 
     return None
@@ -318,7 +318,7 @@ def get_usb_device_name(iface: str) -> str | None:
         return None
 
     device_name = parts[1]
-    logger.debug(f"[{sanitize_for_log(iface)}] Device: {sanitize_for_log(device_name)}")
+    logger.debug("[%s] Device: %s", sanitize_for_log(iface), sanitize_for_log(device_name))
     return device_name
 
 

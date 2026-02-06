@@ -235,8 +235,41 @@ preferred-modules = []
 overgeneral-exceptions = ["builtins.BaseException"]  # Only BaseException is too broad
 
 [tool.pylint.logging]
-# Logging format (we use f-strings in logging)
-logging-format-style = "new"  # Allow f-strings in logging
+# PEP 391 Compliant Logging Configuration
+# =========================================
+# 
+# PEP 391 recommends LAZY EVALUATION for logging using % style formatting.
+# This provides significant benefits:
+#
+# 1. PERFORMANCE: Arguments are NOT evaluated if log level is disabled
+#    Example: logger.debug("Processing %d items", expensive_count())
+#    If DEBUG is disabled, expensive_count() is never called
+#
+# 2. STRUCTURED LOGGING: Better integration with logging aggregation tools
+#    (Splunk, ELK, etc.) which can parse % style format strings
+#
+# 3. MEMORY EFFICIENCY: String formatting only happens when message is logged
+#
+# CORRECT (PEP 391 compliant):
+#   logger.debug("Found %d interfaces: %s", len(interfaces), ", ".join(interfaces))
+#   logger.info("Processing interface %s with IP %s", name, ip)
+#   logger.error("Failed to connect to %s:%d", host, port)
+#
+# INCORRECT (current codebase style - should be migrated):
+#   logger.debug(f"Found {len(interfaces)} interfaces: {', '.join(interfaces)}")
+#   logger.info(f"Processing interface {name} with IP {ip}")
+#   logger.error(f"Failed to connect to {host}:{port}")
+#
+# MIGRATION PLAN:
+# The current codebase uses f-strings in logging. To maintain backwards compatibility
+# during migration, this is set to "old" to encourage proper lazy formatting for new code.
+# Existing code should be gradually migrated from f-strings to % formatting.
+
+# Use "old" (%) style for PEP 391 compliance and lazy evaluation
+logging-format-style = "old"
+
+# Specify which modules provide logging functionality
+logging-modules = ["logging"]
 
 [tool.pylint.miscellaneous]
 # Don't warn about TODO comments

@@ -11,7 +11,6 @@ Supports export to JSON and CSV formats for automation and integration.
 import sys
 import argparse
 from pathlib import Path
-from typing import Optional
 
 from logging_config import setup_logging, get_logger
 from orchestrator import check_dependencies, collect_network_data
@@ -56,12 +55,6 @@ Examples:
     )
 
     parser.add_argument(
-        '--no-color',
-        action='store_true',
-        help='Disable colored output'
-    )
-
-    parser.add_argument(
         '--export',
         choices=['json', 'csv'],
         help='Export data in specified format (json or csv)'
@@ -84,10 +77,10 @@ def main() -> None:
         print("Error: --output requires --export", file=sys.stderr)
         sys.exit(1)
 
+    # Color output is always enabled
     setup_logging(
         verbose=args.verbose,
-        log_file=args.log_file,
-        use_colors=not args.no_color
+        log_file=args.log_file
     )
 
     logger.info("Network Analysis Tool starting")
@@ -105,22 +98,22 @@ def main() -> None:
         if args.export == 'json':
             if args.output:
                 save_json(network_data, str(args.output))
-                logger.info(f"JSON exported to {args.output}")
+                logger.info("JSON exported to %s", args.output)
             else:
                 print(export_to_json(network_data))
 
         elif args.export == 'csv':
             if args.output:
                 save_csv(network_data, str(args.output))
-                logger.info(f"CSV exported to {args.output}")
+                logger.info("CSV exported to %s", args.output)
             else:
                 print(export_to_csv(network_data))
 
     else:
         if args.verbose:
-            logger.info(f"\n{'='*60}")
+            logger.info("\n%s", "=" * 60)
             logger.info("NETWORK INTERFACE SUMMARY")
-            logger.info(f"{'='*60}\n")
+            logger.info("%s\n", "=" * 60)
         else:
             print()
 

@@ -20,7 +20,7 @@ class TestArgumentParsing:
         args = parse_arguments()
 
         assert args.verbose is False
-        # FIXED: Removed no_color assertion (option no longer exists)
+        assert args.no_color is False
         assert args.log_file is None
         assert args.export is None
         assert args.output is None
@@ -43,7 +43,14 @@ class TestArgumentParsing:
 
         assert args.verbose is True
 
-    # DELETED: test_parse_args_no_color - --no-color option removed
+    @patch('sys.argv', ['netcheck.py', '--no-color'])
+    def test_parse_args_no_color(self) -> None:
+        """Test no-color flag."""
+        from netcheck import parse_arguments
+
+        args = parse_arguments()
+
+        assert args.no_color is True
 
     @patch('sys.argv', ['netcheck.py', '--log-file', '/tmp/test.log'])
     def test_parse_args_log_file(self) -> None:
@@ -82,16 +89,15 @@ class TestArgumentParsing:
         assert args.export == 'json'
         assert args.output == Path('/tmp/output.json')
 
-    @patch('sys.argv', ['netcheck.py', '-v', '--log-file', '/var/log/netcheck.log'])
+    @patch('sys.argv', ['netcheck.py', '-v', '--no-color', '--log-file', '/var/log/netcheck.log'])
     def test_parse_args_all_flags_combined(self) -> None:
         """Test all command-line flags together."""
-        # FIXED: Removed --no-color from sys.argv
         from netcheck import parse_arguments
 
         args = parse_arguments()
 
         assert args.verbose is True
-        # FIXED: Removed no_color assertion
+        assert args.no_color is True
         assert args.log_file == Path('/var/log/netcheck.log')
 
     @patch('sys.argv', ['netcheck.py', '--help'])
@@ -305,8 +311,29 @@ class TestLoggingSetup:
         call_kwargs = mock_setup.call_args.kwargs
         assert call_kwargs['verbose'] is True
 
-    # DELETED: test_setup_logging_called_no_color - --no-color option removed
-    # Colors are now always enabled
+    @patch('netcheck.collect_network_data')
+    @patch('netcheck.format_output')
+    @patch('netcheck.check_dependencies')
+    @patch('netcheck.setup_logging')
+    def test_setup_logging_called_no_color(
+        self,
+        mock_setup: Mock,
+        mock_check_deps: Mock,
+        mock_format: Mock,
+        mock_collect: Mock,
+    ) -> None:
+        """Test logging setup with no-color flag."""
+        mock_check_deps.return_value = True
+        mock_collect.return_value = []
+
+        from netcheck import main
+
+        with patch('sys.argv', ['netcheck.py', '--no-color']):
+            main()
+
+        mock_setup.assert_called_once()
+        call_kwargs = mock_setup.call_args.kwargs
+        assert call_kwargs['use_colors'] is False
 
 
 class TestIntegration:

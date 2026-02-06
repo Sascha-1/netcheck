@@ -81,9 +81,8 @@ class TestLoggingSetup:
 
     def test_setup_logging_basic(self) -> None:
 
-        """Test basic logging setup - colors always enabled."""
-        # FIXED: Removed use_colors parameter (no longer exists)
-        setup_logging(verbose=False)
+        """Test basic logging setup."""
+        setup_logging(verbose=False, use_colors=False)
         logger = get_logger("test")
 
         # Should have logger
@@ -99,3 +98,4 @@ class TestLoggingSetup:
         assert logger1.name == "module1"
         assert logger2.name == "module2"
         assert logger1 is not logger2
+

@@ -7,7 +7,7 @@ verbosity levels. Replaces scattered print() statements with proper logging.
 IMPROVEMENTS:
 - Clearer documentation on usage
 - Better integration with sanitization (from utils.system)
-- Color support detection
+- Color support always enabled (--no-color option removed)
 - FIXED: ColoredFormatter only applied to console, not files
 
 Security:
@@ -96,14 +96,13 @@ class ColoredFormatter(logging.Formatter):
 
 def setup_logging(
     verbose: bool = False,
-    log_file: Optional[Path] = None,
-    use_colors: bool = True
+    log_file: Optional[Path] = None
 ) -> None:
     """
     Configure application-wide logging.
 
     Sets up logging handlers for both console and optional file output.
-    Console output uses colored formatting, file output uses plain text.
+    Console output always uses colored formatting, file output uses plain text.
 
     Logging Levels:
         DEBUG: Detailed diagnostic information (only shown with -v)
@@ -115,13 +114,11 @@ def setup_logging(
     Args:
         verbose: If True, enable DEBUG level logging
         log_file: Optional file path to write logs to
-        use_colors: If True, use colored output for console (default: True)
-                   Set to False with --no-color flag
 
     Examples:
         >>> setup_logging(verbose=True)  # Enable debug logging
         >>> setup_logging(log_file=Path("netcheck.log"))  # Log to file
-        >>> setup_logging(verbose=True, use_colors=False)  # Debug without colors
+        >>> setup_logging(verbose=True)  # Debug with colors (always enabled)
 
     Security:
         All log messages should use sanitize_for_log() from utils.system
@@ -137,28 +134,19 @@ def setup_logging(
     # Add verbose filter to console handler
     console_handler.addFilter(VerboseFilter(verbose))
 
-    # FIXED: Choose formatter based on color preference FOR CONSOLE ONLY
-    console_formatter: logging.Formatter
-    if use_colors:
-        console_formatter = ColoredFormatter(
-            '%(levelname)s: %(message)s'
-        )
-    else:
-        console_formatter = logging.Formatter(
-            '%(levelname)s: %(message)s'
-        )
-
+    # Always use colored formatter for console
+    console_formatter = ColoredFormatter('%(levelname)s: %(message)s')
     console_handler.setFormatter(console_formatter)
 
     # Prepare list of handlers
     handlers: list[logging.Handler] = [console_handler]
 
-    # FIXED: Add file handler if log file specified - ALWAYS use plain formatter
+    # Add file handler if log file specified - ALWAYS use plain formatter
     if log_file:
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)  # Always log everything to file
 
-        # CRITICAL FIX: Always use plain formatter for files (NO COLOR CODES)
+        # CRITICAL: Always use plain formatter for files (NO COLOR CODES)
         # File logs should never contain ANSI escape sequences
         file_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -199,10 +187,10 @@ def get_logger(name: str) -> logging.Logger:
         from utils.system import sanitize_for_log
 
         # WRONG - Potential log injection:
-        logger.debug(f"Processing {user_input}")
+        logger.debug("Processing %s", user_input)
 
         # CORRECT - Sanitized:
-        logger.debug(f"Processing {sanitize_for_log(user_input)}")
+        logger.debug("Processing %s", sanitize_for_log(user_input))
         ```
 
     Args:
