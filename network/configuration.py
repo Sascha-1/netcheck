@@ -5,6 +5,7 @@ Queries IP addresses, routing information, and gateway configuration.
 All operations query the kernel via the ip command (netlink interface).
 Supports both IPv4 and IPv6.
 
+PHASE 2 MIGRATION: 1 logging call migrated to PEP 391 compliant % formatting.
 IMPROVEMENTS:
 - HIGH: Batched IP queries (queries all interfaces at once)
 - MEDIUM: Batched route queries (single function returns both gateway and metric)
@@ -229,7 +230,8 @@ def get_active_interface() -> Optional[str]:
                     if dev_index + 1 < len(parts):
                         iface = parts[dev_index + 1]
                         safe_iface = sanitize_for_log(iface)
-                        logger.debug(f"Active interface: {safe_iface}")
+                        # MIGRATED: f-string → % formatting (1/1)
+                        logger.debug("Active interface: %s", safe_iface)
                         return iface
                 except (ValueError, IndexError):
                     pass

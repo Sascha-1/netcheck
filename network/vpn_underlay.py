@@ -4,9 +4,7 @@ VPN underlay detection module.
 Determines which physical interface carries VPN tunnel traffic.
 Uses deterministic kernel routing queries.
 
-IMPROVED:
-- Uses enums directly without str() conversions
-- Port 443 removed from COMMON_VPN_PORTS to avoid false positives
+PHASE 2 MIGRATION: All 16 logging calls migrated to PEP 391 compliant % formatting.
 """
 
 import subprocess
@@ -41,7 +39,8 @@ def get_vpn_connection_endpoint(iface_name: str, local_ip: str) -> Optional[str]
     safe_name = sanitize_for_log(iface_name)
     safe_ip = sanitize_for_log(local_ip)
 
-    logger.debug(f"[{safe_name}] Looking for VPN connection from {safe_ip}")
+    # MIGRATED: f-string → % formatting (1/16)
+    logger.debug("[%s] Looking for VPN connection from %s", safe_name, safe_ip)
 
     try:
         result = subprocess.run(
@@ -99,11 +98,15 @@ def get_vpn_connection_endpoint(iface_name: str, local_ip: str) -> Optional[str]
                                 except (ValueError, IndexError):
                                     pass
 
-                            logger.debug(f"[{safe_name}] Found VPN connection to: {sanitize_for_log(remote_ip)}")
+                            # MIGRATED: f-string → % formatting (2/16)
+                            logger.debug("[%s] Found VPN connection to: %s",
+                                       safe_name, sanitize_for_log(remote_ip))
                             return remote_ip
 
         # Strategy 2: Check for WireGuard (port 51820) to public IPs
-        logger.debug(f"[{safe_name}] No direct connection found, checking all WireGuard ports")
+        # MIGRATED: f-string → % formatting (3/16)
+        logger.debug("[%s] No direct connection found, checking all WireGuard ports",
+                   safe_name)
 
         for line in result.stdout.split('\n'):
             parts = line.split()
@@ -144,13 +147,16 @@ def get_vpn_connection_endpoint(iface_name: str, local_ip: str) -> Optional[str]
                                         continue
 
                                 protocol = COMMON_VPN_PORTS.get(remote_port, "Unknown")
-                                logger.debug(f"[{safe_name}] Found {protocol} connection to: {sanitize_for_log(remote_ip)}:51820")
+                                # MIGRATED: f-string → % formatting (4/16)
+                                logger.debug("[%s] Found %s connection to: %s:51820",
+                                           safe_name, protocol, sanitize_for_log(remote_ip))
                                 return remote_ip
                         except (ValueError, IndexError):
                             continue
 
         # Strategy 3: Check for other VPN ports
-        logger.debug(f"[{safe_name}] No WireGuard connection, checking other VPN ports")
+        # MIGRATED: f-string → % formatting (5/16)
+        logger.debug("[%s] No WireGuard connection, checking other VPN ports", safe_name)
 
         for line in result.stdout.split('\n'):
             parts = line.split()
@@ -189,12 +195,16 @@ def get_vpn_connection_endpoint(iface_name: str, local_ip: str) -> Optional[str]
                                         continue
 
                                 protocol = COMMON_VPN_PORTS.get(remote_port, "Unknown")
-                                logger.debug(f"[{safe_name}] Found VPN-like connection to: {sanitize_for_log(remote_ip)}:{remote_port} ({protocol})")
+                                # MIGRATED: f-string → % formatting (6/16)
+                                logger.debug("[%s] Found VPN-like connection to: %s:%d (%s)",
+                                           safe_name, sanitize_for_log(remote_ip),
+                                           remote_port, protocol)
                                 return remote_ip
                         except (ValueError, IndexError):
                             continue
 
-        logger.debug(f"[{safe_name}] No VPN server connection found")
+        # MIGRATED: f-string → % formatting (7/16)
+        logger.debug("[%s] No VPN server connection found", safe_name)
         return None
 
     except FileNotFoundError:
@@ -204,7 +214,8 @@ def get_vpn_connection_endpoint(iface_name: str, local_ip: str) -> Optional[str]
         logger.warning("ss command timeout")
         return None
     except Exception as e:
-        logger.warning(f"Failed to get VPN connection: {e}")
+        # MIGRATED: f-string → % formatting (8/16)
+        logger.warning("Failed to get VPN connection: %s", e)
         return None
 
 
@@ -225,10 +236,12 @@ def get_vpn_server_endpoint(iface_name: str, iface_type: InterfaceType | str, lo
     safe_name = sanitize_for_log(iface_name)
 
     if local_ip == "N/A":
-        logger.debug(f"[{safe_name}] No local IP, cannot find VPN endpoint")
+        # MIGRATED: f-string → % formatting (9/16)
+        logger.debug("[%s] No local IP, cannot find VPN endpoint", safe_name)
         return None
 
-    logger.debug(f"[{safe_name}] Detecting VPN server endpoint via active connections")
+    # MIGRATED: f-string → % formatting (10/16)
+    logger.debug("[%s] Detecting VPN server endpoint via active connections", safe_name)
 
     return get_vpn_connection_endpoint(iface_name, local_ip)
 
@@ -246,7 +259,8 @@ def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces: List["In
     IMPROVED: Uses InterfaceType enum for comparisons.
     """
     safe_ip = sanitize_for_log(vpn_server_ip)
-    logger.debug(f"Finding physical interface carrying VPN traffic to {safe_ip}")
+    # MIGRATED: f-string → % formatting (11/16)
+    logger.debug("Finding physical interface carrying VPN traffic to %s", safe_ip)
 
     candidates: List[tuple[str, str]] = []
     for iface in all_interfaces:
@@ -265,7 +279,9 @@ def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces: List["In
             safe_name = sanitize_for_log(iface.name)
             safe_gateway = sanitize_for_log(iface.default_gateway)
             safe_metric = sanitize_for_log(iface.metric)
-            logger.debug(f"  Candidate: {safe_name} (gateway: {safe_gateway}, metric: {safe_metric})")
+            # MIGRATED: f-string → % formatting (12/16)
+            logger.debug("  Candidate: %s (gateway: %s, metric: %s)",
+                       safe_name, safe_gateway, safe_metric)
 
     if not candidates:
         logger.warning("No physical interfaces with default gateway found")
@@ -278,7 +294,9 @@ def find_physical_interface_for_vpn(vpn_server_ip: str, all_interfaces: List["In
 
     physical_interface: str = candidates_sorted[0][0]
     safe_name = sanitize_for_log(physical_interface)
-    logger.info(f"VPN tunnel traffic routes through: {safe_name} (physical interface with default gateway)")
+    # MIGRATED: f-string → % formatting (13/16)
+    logger.info("VPN tunnel traffic routes through: %s (physical interface with default gateway)",
+              safe_name)
     return physical_interface
 
 
@@ -315,12 +333,15 @@ def detect_vpn_underlay(interfaces: List["InterfaceInfo"]) -> None:
                 interface.vpn_server_ip = vpn_ip
                 safe_name = sanitize_for_log(interface.name)
                 safe_ip = sanitize_for_log(vpn_ip)
-                logger.debug(f"[{safe_name}] VPN server: {safe_ip}")
+                # MIGRATED: f-string → % formatting (14/16)
+                logger.debug("[%s] VPN server: %s", safe_name, safe_ip)
 
                 physical_if = find_physical_interface_for_vpn(vpn_ip, interfaces)
                 if physical_if:
                     vpn_to_physical[interface.name] = physical_if
-                    logger.info(f"[{safe_name}] Tunnel carried by: {sanitize_for_log(physical_if)}")
+                    # MIGRATED: f-string → % formatting (15/16)
+                    logger.info("[%s] Tunnel carried by: %s",
+                              safe_name, sanitize_for_log(physical_if))
 
     for interface in interfaces:
         if interface.name in vpn_to_physical.values():
@@ -328,4 +349,6 @@ def detect_vpn_underlay(interfaces: List["InterfaceInfo"]) -> None:
             vpn_names = [vpn for vpn, phys in vpn_to_physical.items() if phys == interface.name]
             safe_vpn_names = [sanitize_for_log(name) for name in vpn_names]
             safe_iface = sanitize_for_log(interface.name)
-            logger.info(f"[{safe_iface}] Carries VPN tunnel for: {', '.join(safe_vpn_names)}")
+            # MIGRATED: f-string → % formatting (16/16)
+            logger.info("[%s] Carries VPN tunnel for: %s",
+                      safe_iface, ', '.join(safe_vpn_names))
