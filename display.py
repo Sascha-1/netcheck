@@ -4,6 +4,7 @@ Display and formatting module.
 Handles all output formatting and text manipulation for terminal display.
 All data cleaning happens here at display time.
 
+PHASE 3 MIGRATION: No logging calls to migrate (display module has no logging).
 IMPROVED: Handles enums directly without needing str() conversions.
 UPDATED: Removed unnecessary LRU caching from cleanup functions.
 """
