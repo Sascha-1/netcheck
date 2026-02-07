@@ -5,17 +5,6 @@ Tests command execution and IP address validation functions.
 Enhanced with comprehensive edge case testing.
 """
 
-from models import InterfaceInfo, EgressInfo
-
-from typing import Any, Dict, List, Optional, Generator
-from pathlib import Path
-from unittest.mock import MagicMock
-from _pytest.logging import LogCaptureFixture
-from _pytest.capture import CaptureFixture
-from _pytest.config import Config
-from _pytest.monkeypatch import MonkeyPatch
-
-
 import pytest
 import subprocess
 from unittest.mock import Mock, patch
@@ -32,7 +21,7 @@ from utils.system import (
 class TestRunCommand:
     """Test run_command function."""
 
-    def test_successful_command(self, mock_subprocess_run: MagicMock) -> None:
+    def test_successful_command(self, mock_subprocess_run: Mock) -> None:
         """Test successful command execution."""
         mock_result = Mock()
         mock_result.stdout = "command output\n"
@@ -48,7 +37,7 @@ class TestRunCommand:
         assert call_args[1]["text"] is True
         assert call_args[1]["check"] is True
 
-    def test_command_with_timeout(self, mock_subprocess_run: MagicMock) -> None:
+    def test_command_with_timeout(self, mock_subprocess_run: Mock) -> None:
         """Test that timeout is configured."""
         mock_result = Mock()
         mock_result.stdout = "output"
@@ -60,7 +49,7 @@ class TestRunCommand:
         assert "timeout" in call_args[1]
         assert call_args[1]["timeout"] > 0
 
-    def test_command_failure(self, mock_subprocess_run: MagicMock) -> None:
+    def test_command_failure(self, mock_subprocess_run: Mock) -> None:
         """Test handling of command failure."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(1, "cmd")
 
@@ -68,7 +57,7 @@ class TestRunCommand:
 
         assert result is None
 
-    def test_command_timeout(self, mock_subprocess_run: MagicMock) -> None:
+    def test_command_timeout(self, mock_subprocess_run: Mock) -> None:
         """Test handling of command timeout."""
         mock_subprocess_run.side_effect = subprocess.TimeoutExpired("cmd", 10)
 
@@ -76,7 +65,7 @@ class TestRunCommand:
 
         assert result is None
 
-    def test_command_not_found(self, mock_subprocess_run: MagicMock) -> None:
+    def test_command_not_found(self, mock_subprocess_run: Mock) -> None:
         """Test handling of command not found."""
         mock_subprocess_run.side_effect = FileNotFoundError()
 
@@ -84,7 +73,7 @@ class TestRunCommand:
 
         assert result is None
 
-    def test_output_stripping(self, mock_subprocess_run: MagicMock) -> None:
+    def test_output_stripping(self, mock_subprocess_run: Mock) -> None:
         """Test that output is stripped of whitespace."""
         mock_result = Mock()
         mock_result.stdout = "  output with spaces  \n"
@@ -94,7 +83,7 @@ class TestRunCommand:
 
         assert result == "output with spaces"
 
-    def test_empty_output(self, mock_subprocess_run: MagicMock) -> None:
+    def test_empty_output(self, mock_subprocess_run: Mock) -> None:
         """Test handling of empty output."""
         mock_result = Mock()
         mock_result.stdout = ""

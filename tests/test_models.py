@@ -4,15 +4,6 @@ Tests for data models.
 Verifies InterfaceInfo and EgressInfo data structures work correctly.
 """
 
-from typing import Any, Dict, List, Optional, Generator
-from pathlib import Path
-from unittest.mock import MagicMock
-from _pytest.logging import LogCaptureFixture
-from _pytest.capture import CaptureFixture
-from _pytest.config import Config
-from _pytest.monkeypatch import MonkeyPatch
-
-
 import pytest
 from models import InterfaceInfo, EgressInfo
 from enums import DataMarker, DnsLeakStatus
@@ -22,7 +13,6 @@ class TestInterfaceInfo:
     """Test InterfaceInfo model."""
 
     def test_create_empty(self) -> None:
-
         """Test creating empty interface info with default values."""
         info = InterfaceInfo.create_empty("eth0")
 
@@ -34,8 +24,7 @@ class TestInterfaceInfo:
         assert info.current_dns is None
         assert info.dns_leak_status == str(DnsLeakStatus.NOT_APPLICABLE)
 
-    def test_with_all_fields(self, sample_interface_info: Any) -> None:
-
+    def test_with_all_fields(self, sample_interface_info: InterfaceInfo) -> None:
         """Test interface info with all fields populated."""
         info = sample_interface_info
 
@@ -49,7 +38,6 @@ class TestInterfaceInfo:
         assert info.external_ipv4 == "1.2.3.4"
 
     def test_dataclass_immutability(self) -> None:
-
         """Test that we can modify InterfaceInfo fields."""
         info = InterfaceInfo.create_empty("eth0")
 
@@ -62,7 +50,6 @@ class TestEgressInfo:
     """Test EgressInfo model."""
 
     def test_create_normal(self) -> None:
-
         """Test creating normal egress info."""
         info = EgressInfo(
             external_ip="1.2.3.4",
@@ -77,7 +64,6 @@ class TestEgressInfo:
         assert info.country == "US"
 
     def test_create_error(self) -> None:
-
         """Test creating error egress info."""
         info = EgressInfo.create_error()
 
