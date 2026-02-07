@@ -209,7 +209,10 @@ def setup_logging(
     if not verbose:
         logging.getLogger('urllib3').setLevel(logging.WARNING)
         logging.getLogger('requests').setLevel(logging.WARNING)
-    # In verbose mode, leave them at DEBUG level (show everything)
+    else:
+        # In verbose mode, reset to NOTSET so they inherit from root (DEBUG)
+        logging.getLogger('urllib3').setLevel(logging.NOTSET)
+        logging.getLogger('requests').setLevel(logging.NOTSET)
 
 
 def get_logger(name: str) -> logging.Logger:
