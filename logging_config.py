@@ -4,11 +4,10 @@ Logging configuration for netcheck.
 Provides structured logging throughout the application with configurable
 verbosity levels. Replaces scattered print() statements with proper logging.
 
-IMPROVEMENTS:
-- Clearer documentation on usage
-- Better integration with sanitization (from utils.system)
-- Color support always enabled (--no-color option removed)
-- FIXED: ColoredFormatter only applied to console, not files
+UPDATED:
+- Default mode shows WARNING+ only (not INFO)
+- Verbose mode shows DEBUG+ including third-party libraries
+- Third-party library noise (urllib3, requests) suppressed in default mode
 
 Security:
     All log messages should use sanitize_for_log() from utils.system
@@ -25,10 +24,12 @@ class VerboseFilter(logging.Filter):
     """
     Filter that shows verbose messages only when verbose mode is enabled.
 
-    Messages at INFO level and above always pass through.
-    DEBUG messages only pass when verbose mode is enabled.
+    Messages at WARNING level and above always pass through.
+    DEBUG and INFO messages only pass when verbose mode is enabled.
 
     This allows users to run the tool in quiet mode (default) or verbose mode (-v).
+    
+    UPDATED: Default mode now shows only WARNING+ (not INFO+)
     """
 
     def __init__(self, verbose: bool = False):
@@ -36,7 +37,7 @@ class VerboseFilter(logging.Filter):
         Initialize the filter.
 
         Args:
-            verbose: If True, allow DEBUG messages through
+            verbose: If True, allow DEBUG and INFO messages through
         """
         super().__init__()
         self.verbose = verbose
@@ -51,8 +52,11 @@ class VerboseFilter(logging.Filter):
         Returns:
             True if record should be logged
         """
-        if record.levelno >= logging.INFO:
+        # WARNING and above always pass through
+        if record.levelno >= logging.WARNING:
             return True
+        
+        # DEBUG and INFO only pass in verbose mode
         return self.verbose
 
 
@@ -96,36 +100,59 @@ class ColoredFormatter(logging.Formatter):
 
 def setup_logging(
     verbose: bool = False,
-    log_file: Optional[Path] = None
+    log_file: Optional[Path] = None,
+    use_colors: bool = True
 ) -> None:
     """
     Configure application-wide logging.
 
     Sets up logging handlers for both console and optional file output.
-    Console output always uses colored formatting, file output uses plain text.
+    Console output uses colored formatting, file output uses plain text.
+
+    UPDATED Logging Behavior:
+        Default mode (verbose=False):
+            - Shows WARNING and above only
+            - Suppresses urllib3/requests DEBUG noise
+            - Clean output for normal usage
+        
+        Verbose mode (verbose=True):
+            - Shows DEBUG and above for all loggers
+            - Includes urllib3/requests connection details
+            - Complete debugging information
 
     Logging Levels:
         DEBUG: Detailed diagnostic information (only shown with -v)
-        INFO: General informational messages (always shown)
+        INFO: General informational messages (only shown with -v)
         WARNING: Warning messages (always shown)
         ERROR: Error messages (always shown)
         CRITICAL: Critical errors (always shown)
 
     Args:
-        verbose: If True, enable DEBUG level logging
+        verbose: If True, enable DEBUG level logging (shows everything)
         log_file: Optional file path to write logs to
+        use_colors: If True, use colored output for console (default: True)
+                   Set to False with --no-color flag (if implemented)
 
     Examples:
-        >>> setup_logging(verbose=True)  # Enable debug logging
-        >>> setup_logging(log_file=Path("netcheck.log"))  # Log to file
-        >>> setup_logging(verbose=True)  # Debug with colors (always enabled)
+        Default mode (quiet):
+        >>> setup_logging(verbose=False)
+        >>> # Only warnings/errors shown
+        
+        Verbose mode (debugging):
+        >>> setup_logging(verbose=True)
+        >>> # Shows DEBUG, INFO, WARNING, ERROR, CRITICAL
+        
+        With log file:
+        >>> setup_logging(verbose=True, log_file=Path("netcheck.log"))
+        >>> # Logs everything to file, respects verbose for console
 
     Security:
         All log messages should use sanitize_for_log() from utils.system
         to prevent log injection attacks.
     """
-    # Determine log level based on verbose flag
-    level = logging.DEBUG if verbose else logging.INFO
+    # UPDATED: Default level is WARNING (not INFO)
+    # This makes default mode quiet - only shows warnings and errors
+    level = logging.DEBUG if verbose else logging.WARNING
 
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -134,8 +161,17 @@ def setup_logging(
     # Add verbose filter to console handler
     console_handler.addFilter(VerboseFilter(verbose))
 
-    # Always use colored formatter for console
-    console_formatter = ColoredFormatter('%(levelname)s: %(message)s')
+    # Choose formatter based on color preference FOR CONSOLE ONLY
+    console_formatter: logging.Formatter
+    if use_colors:
+        console_formatter = ColoredFormatter(
+            '%(levelname)s: %(message)s'
+        )
+    else:
+        console_formatter = logging.Formatter(
+            '%(levelname)s: %(message)s'
+        )
+
     console_handler.setFormatter(console_formatter)
 
     # Prepare list of handlers
@@ -146,7 +182,7 @@ def setup_logging(
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG)  # Always log everything to file
 
-        # CRITICAL: Always use plain formatter for files (NO COLOR CODES)
+        # ALWAYS use plain formatter for files (NO COLOR CODES)
         # File logs should never contain ANSI escape sequences
         file_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -161,6 +197,20 @@ def setup_logging(
         force=True  # Override any existing configuration
     )
 
+    # UPDATED: Suppress third-party library noise in default mode only
+    # urllib3 and requests log verbose DEBUG messages about HTTP connections
+    # that are not useful for normal users
+    #
+    # Examples of suppressed messages:
+    #   DEBUG: Starting new HTTPS connection (1): ipinfo.io:443
+    #   DEBUG: https://ipinfo.io:443 "GET /json HTTP/1.1" 200 None
+    #
+    # In verbose mode (-v), these are shown for complete debugging
+    if not verbose:
+        logging.getLogger('urllib3').setLevel(logging.WARNING)
+        logging.getLogger('requests').setLevel(logging.WARNING)
+    # In verbose mode, leave them at DEBUG level (show everything)
+
 
 def get_logger(name: str) -> logging.Logger:
     """
@@ -173,11 +223,11 @@ def get_logger(name: str) -> logging.Logger:
         from logging_config import get_logger
         logger = get_logger(__name__)
 
-        # Then use throughout the module:
-        logger.debug("Debug message")
-        logger.info("Info message")
-        logger.warning("Warning message")
-        logger.error("Error message")
+        # Then use throughout the module with PEP 391 style:
+        logger.debug("Debug message: %s", variable)
+        logger.info("Info message: %s %s", var1, var2)
+        logger.warning("Warning message: %s", variable)
+        logger.error("Error message: %s", variable)
         ```
 
     Security:
