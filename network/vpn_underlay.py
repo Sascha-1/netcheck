@@ -11,7 +11,7 @@ import subprocess
 from typing import Optional, List, TYPE_CHECKING
 
 from logging_config import get_logger
-from utils.system import run_command, is_valid_ip, sanitize_for_log
+from utils.system import is_valid_ip, sanitize_for_log
 from config import TIMEOUT_SECONDS, COMMON_VPN_PORTS
 from enums import InterfaceType
 

@@ -142,31 +142,24 @@ class TestFindPhysicalInterfaceForVpn:
 
         assert result == "eth0"
 
-    @patch('network.vpn_underlay.run_command')
-    def test_direct_route(self, mock_run: MagicMock) -> None:
-
-        """Test direct route without via gateway."""
+    def test_direct_route(self) -> None:
+        """Test finding physical interface with default gateway."""
         from models import InterfaceInfo
-
-        mock_run.return_value = "159.26.108.89 dev wlan0 src 192.168.1.101"
 
         interfaces = [
             InterfaceInfo.create_empty("wlan0"),
         ]
         interfaces[0].interface_type = "wireless"
         interfaces[0].default_gateway = "192.168.1.1"
+        interfaces[0].metric = "100"
 
         result = find_physical_interface_for_vpn("159.26.108.89", interfaces)
 
         assert result == "wlan0"
 
-    @patch('network.vpn_underlay.run_command')
-    def test_command_failure(self, mock_run: MagicMock) -> None:
-
-        """Test when route command fails - uses fallback method."""
+    def test_command_failure(self) -> None:
+        """Test when no physical interface has a default gateway - uses fallback."""
         from models import InterfaceInfo
-
-        mock_run.return_value = None
 
         # Fallback should find eth0 as it has a default gateway
         interfaces = [
@@ -180,15 +173,11 @@ class TestFindPhysicalInterfaceForVpn:
 
         result = find_physical_interface_for_vpn("159.26.108.89", interfaces)
 
-        assert result == "eth0"  # Fallback finds physical interface with gateway
+        assert result == "eth0"
 
-    @patch('network.vpn_underlay.run_command')
-    def test_malformed_output(self, mock_run: MagicMock) -> None:
-
-        """Test malformed route output - uses fallback."""
+    def test_malformed_output(self) -> None:
+        """Test with interface that has a default gateway."""
         from models import InterfaceInfo
-
-        mock_run.return_value = "malformed output without dev"
 
         interfaces = [
             InterfaceInfo.create_empty("eth0"),
@@ -199,7 +188,7 @@ class TestFindPhysicalInterfaceForVpn:
 
         result = find_physical_interface_for_vpn("159.26.108.89", interfaces)
 
-        assert result == "eth0"  # Fallback finds physical interface
+        assert result == "eth0"
 
     def test_ipv6_route(self) -> None:
 
@@ -217,14 +206,9 @@ class TestFindPhysicalInterfaceForVpn:
 
         assert result == "eth0"
 
-    @patch('network.vpn_underlay.run_command')
-    def test_protonvpn_routing_table(self, mock_run: MagicMock) -> None:
-
-        """Test ProtonVPN case where ip route get returns VPN interface."""
+    def test_protonvpn_routing_table(self) -> None:
+        """Test ProtonVPN case with custom routing tables - fallback finds physical interface."""
         from models import InterfaceInfo
-
-        # ProtonVPN returns the VPN interface itself due to custom routing tables
-        mock_run.return_value = "185.70.42.41 dev proton0 table 106088063 src 10.2.0.2"
 
         interfaces = [
             InterfaceInfo.create_empty("eno2"),
@@ -237,16 +221,12 @@ class TestFindPhysicalInterfaceForVpn:
 
         result = find_physical_interface_for_vpn("185.70.42.41", interfaces)
 
-        # Should detect proton0 is a VPN interface and use fallback
+        # Should find eno2 as physical interface with gateway
         assert result == "eno2"
 
-    @patch('network.vpn_underlay.run_command')
-    def test_no_physical_interface(self, mock_run: MagicMock) -> None:
-
+    def test_no_physical_interface(self) -> None:
         """Test when no physical interfaces have default gateway."""
         from models import InterfaceInfo
-
-        mock_run.return_value = None
 
         # Only VPN interfaces, no physical ones with gateway
         interfaces = [

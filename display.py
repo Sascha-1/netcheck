@@ -10,7 +10,7 @@ UPDATED: Removed unnecessary LRU caching from cleanup functions.
 """
 
 import re
-from typing import List, Dict
+from typing import List
 
 from models import InterfaceInfo
 from config import TABLE_COLUMNS, DEVICE_NAME_CLEANUP, Colors, COLUMN_SEPARATOR
@@ -48,7 +48,9 @@ def cleanup_device_name(device_name: str) -> str:
     cleaned = " ".join(cleaned.split())
     cleaned = cleaned.strip(" ,-")
 
-    return cleaned if cleaned else device_name
+    if cleaned:
+        return cleaned
+    return device_name
 
 
 def cleanup_isp_name(isp: str) -> str:
@@ -75,8 +77,7 @@ def shorten_text(text: str, max_length: int) -> str:
 
     if (last_space := truncated.rfind(' ')) > 0:
         return text[:last_space]
-    else:
-        return text[:max_length - 3] + "..."
+    return text[:max_length - 3] + "..."
 
 
 def get_column_width(column_name: str) -> int:
@@ -155,7 +156,7 @@ def format_output(interfaces: List[InterfaceInfo]) -> None:
         row_data = [str(val) for val in row_data]
 
         row_parts = []
-        for i, ((col_name, col_width), value) in enumerate(zip(TABLE_COLUMNS, row_data)):
+        for (col_name, col_width), value in zip(TABLE_COLUMNS, row_data):
             if col_name in ("DEVICE", "ISP") and len(value) > col_width:
                 value = value[:col_width]
             row_parts.append(value.ljust(col_width))

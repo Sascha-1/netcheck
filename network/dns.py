@@ -253,9 +253,9 @@ def get_system_dns() -> List[str]:
 
 
 def detect_dns_leak(interface_name: str,
-                   interface_ip: str,
+                   interface_ip: str,  # pylint: disable=unused-argument
                    configured_dns: List[str],
-                   is_vpn: bool,
+                   is_vpn: bool,  # pylint: disable=unused-argument
                    vpn_dns: List[str],
                    isp_dns: List[str]) -> str:
     """

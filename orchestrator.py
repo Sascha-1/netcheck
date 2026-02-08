@@ -31,7 +31,6 @@ from network.configuration import (
 from network.dns import get_interface_dns, check_dns_leaks_all_interfaces
 from network.egress import get_egress_info
 from network.vpn_underlay import detect_vpn_underlay
-from enums import InterfaceType, DataMarker
 from utils.system import sanitize_for_log
 
 logger = get_logger(__name__)
@@ -59,7 +58,7 @@ def check_dependencies() -> bool:
             logger.debug("Found: %s", cmd)
 
     try:
-        import requests
+        import requests  # pylint: disable=import-outside-toplevel,unused-import
         logger.debug("Found: Python requests library")
     except ImportError:
         logger.error("Missing: Python requests library")
@@ -67,7 +66,7 @@ def check_dependencies() -> bool:
         all_present = False
 
     try:
-        import urllib3
+        import urllib3  # pylint: disable=import-outside-toplevel,unused-import
         logger.debug("Found: Python urllib3 library")
     except ImportError:
         logger.warning("Missing: Python urllib3 library (recommended for retry logic)")

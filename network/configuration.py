@@ -151,8 +151,6 @@ def get_route_info(iface_name: str) -> tuple[str, str]:
         - gateway: IP address of gateway, or "NONE" if no default route
         - metric: Routing metric, or "DEFAULT" if not specified, or "NONE" if no route
     """
-    safe_name = sanitize_for_log(iface_name)
-
     output = run_command(["ip", "route", "show", "dev", iface_name])
 
     if output is None:

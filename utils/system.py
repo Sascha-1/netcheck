@@ -187,7 +187,7 @@ def is_valid_ipv6(address: Optional[str]) -> bool:
     """
     Validate if string is a valid IPv6 address.
 
-    FIXED (Issue #4): Line 157 bug - `if address == ':'` â†’ `if address == '::'`
+    FIXED (Issue #4): Line 157 bug - `if address == ':'` → `if address == '::'`
 
     Handles:
     - Full IPv6 addresses (2001:0db8:0000:0000:0000:0000:0000:0001)
@@ -217,7 +217,6 @@ def is_valid_ipv6(address: Optional[str]) -> bool:
     # Check for IPv4-mapped IPv6 (e.g., ::ffff:192.0.2.1 or ::192.0.2.1)
     if '.' in address:
         # Use regex to extract IPv4 from the end
-        import re
         ipv4_pattern = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$'
         match = re.search(ipv4_pattern, address)
 
@@ -234,8 +233,8 @@ def is_valid_ipv6(address: Optional[str]) -> bool:
             if ipv6_part.endswith(':') and not ipv6_part.endswith('::'):
                 ipv6_part = ipv6_part[:-1]
 
-            # FIXED: Special case handling for :: prefix
-            if ipv6_part == ':' or ipv6_part == '':
+            # FIXED: Special case handling for :: prefix - use 'in' operator
+            if ipv6_part in (':', ''):
                 # This means the address was like ::192.0.2.1
                 # The :: represents the compressed zeros, which is valid
                 return True
@@ -285,7 +284,7 @@ def is_valid_ipv6(address: Optional[str]) -> bool:
     for group in all_groups:
         if group:  # Empty groups are OK with ::
             # Must be 1-4 hex digits
-            if not (1 <= len(group) <= 4):
+            if not 1 <= len(group) <= 4:
                 return False
             # Must be valid hex
             if not all(c in '0123456789abcdefABCDEF' for c in group):

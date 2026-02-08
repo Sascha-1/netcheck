@@ -189,7 +189,7 @@ def is_usb_tethered_device(iface: str) -> bool:
     return False
 
 
-def detect_interface_type(iface_name: str, verbose: bool = False) -> InterfaceType:
+def detect_interface_type(iface_name: str, verbose: bool = False) -> InterfaceType:  # pylint: disable=unused-argument
     """
     Detect network interface type.
 
@@ -322,7 +322,7 @@ def get_usb_device_name(iface: str) -> str | None:
     return device_name
 
 
-def get_device_name(iface_name: str, iface_type: InterfaceType | str, verbose: bool = False) -> str:
+def get_device_name(iface_name: str, iface_type: InterfaceType | str, verbose: bool = False) -> str:  # pylint: disable=unused-argument
     """
     Get hardware device name for network interface.
 
