@@ -4,19 +4,10 @@ Tests for network.dns module.
 Tests DNS configuration detection and DNS leak monitoring.
 """
 
-from models import InterfaceInfo, EgressInfo
-
-from typing import Any, Dict, List, Optional, Generator
-from pathlib import Path
-from unittest.mock import MagicMock
-from _pytest.logging import LogCaptureFixture
-from _pytest.capture import CaptureFixture
-from _pytest.config import Config
-from _pytest.monkeypatch import MonkeyPatch
-
-
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
+
+from models import InterfaceInfo, EgressInfo
 from network.dns import (
     get_interface_dns,
     get_system_dns,
@@ -306,7 +297,7 @@ class TestDetectDnsLeak:
 class TestCollectDnsServersByCategory:
     """Test DNS server categorization."""
 
-    def test_categorize_vpn_and_isp(self, sample_interface_list: Any) -> None:
+    def test_categorize_vpn_and_isp(self, sample_interface_list: list[InterfaceInfo]) -> None:
 
         """Test categorizing VPN and ISP DNS servers."""
         vpn_dns, isp_dns = collect_dns_servers_by_category(sample_interface_list)
@@ -363,7 +354,7 @@ class TestCollectDnsServersByCategory:
 class TestCheckDnsLeaksAllInterfaces:
     """Test complete DNS leak checking."""
 
-    def test_update_interface_status(self, sample_interface_list: Any) -> None:
+    def test_update_interface_status(self, sample_interface_list: list[InterfaceInfo]) -> None:
 
         """Test that interface status is updated."""
         # Initially all should be "--"

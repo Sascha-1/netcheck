@@ -40,6 +40,19 @@ markers = [
     "integration: marks tests as integration tests",
 ]
 
+# Consistent ignore patterns across tools
+norecursedirs = [
+    "build",
+    "dist",
+    ".venv",
+    "venv",
+    "env",
+    ".mypy_cache",
+    ".pytest_cache",
+    "htmlcov",
+    "__pycache__",
+]
+
 # ============================================================================
 # Coverage Configuration
 # ============================================================================
@@ -51,6 +64,11 @@ omit = [
     "*/venv/*",
     "*/env/*",
     "*/.venv/*",
+    "*/build/*",
+    "*/dist/*",
+    "*/.mypy_cache/*",
+    "*/.pytest_cache/*",
+    "*/htmlcov/*",
     "cleanup.sh",
     "cleanup.py",
 ]
@@ -100,12 +118,10 @@ show_error_codes = true
 show_error_context = true
 pretty = true
 
-# Scan everything recursively (like pytest does)
-# Just specify "." to scan all .py files in the project
-# This is simpler than listing every file individually
+# Scan all .py files in project (like pytest and pylint)
 files = ["."]
 
-# Exclude patterns for files/directories to skip
+# Consistent exclude patterns
 exclude = [
     "^build/",
     "^dist/",
@@ -114,9 +130,186 @@ exclude = [
     "^env/",
     "^\\.mypy_cache/",
     "^\\.pytest_cache/",
+    "^htmlcov/",
+    "^__pycache__/",
 ]
 
-# No per-module overrides - strict rules apply everywhere
+# ============================================================================
+# Ruff Configuration - Strict Modern Python Linter
+# ============================================================================
+
+[tool.ruff]
+# Python version
+target-version = "py312"
+
+# Line length (match black/mypy/pylint)
+line-length = 100
+
+# Scan all .py files (like pytest, mypy, pylint)
+include = ["*.py"]
+
+# Consistent exclude patterns with other tools
+exclude = [
+    ".venv",
+    "venv",
+    "env",
+    "build",
+    "dist",
+    ".mypy_cache",
+    ".pytest_cache",
+    "htmlcov",
+    "__pycache__",
+    ".git",
+    ".tox",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+# Enable comprehensive rule sets (strict configuration)
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "D",      # pydocstyle
+    "UP",     # pyupgrade
+    "YTT",    # flake8-2020
+    "ANN",    # flake8-annotations
+    "ASYNC",  # flake8-async
+    "S",      # flake8-bandit (security)
+    "BLE",    # flake8-blind-except
+    "FBT",    # flake8-boolean-trap
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "COM",    # flake8-commas
+    "C4",     # flake8-comprehensions
+    "DTZ",    # flake8-datetimez
+    "T10",    # flake8-debugger
+    "EM",     # flake8-errmsg
+    "EXE",    # flake8-executable
+    "FA",     # flake8-future-annotations
+    "ISC",    # flake8-implicit-str-concat
+    "ICN",    # flake8-import-conventions
+    "G",      # flake8-logging-format
+    "INP",    # flake8-no-pep420
+    "PIE",    # flake8-pie
+    "T20",    # flake8-print
+    "PYI",    # flake8-pyi
+    "PT",     # flake8-pytest-style
+    "Q",      # flake8-quotes
+    "RSE",    # flake8-raise
+    "RET",    # flake8-return
+    "SLF",    # flake8-self
+    "SLOT",   # flake8-slots
+    "SIM",    # flake8-simplify
+    "TID",    # flake8-tidy-imports
+    "TCH",    # flake8-type-checking
+    "INT",    # flake8-gettext
+    "ARG",    # flake8-unused-arguments
+    "PTH",    # flake8-use-pathlib
+    "TD",     # flake8-todos
+    "FIX",    # flake8-fixme
+    "ERA",    # eradicate (commented-out code)
+    "PD",     # pandas-vet
+    "PGH",    # pygrep-hooks
+    "PL",     # pylint
+    "TRY",    # tryceratops
+    "FLY",    # flynt
+    "NPY",    # numpy-specific rules
+    "PERF",   # perflint
+    "FURB",   # refurb
+    "LOG",    # flake8-logging
+    "RUF",    # ruff-specific rules
+]
+
+# Disable rules that conflict with our style or are too noisy
+ignore = [
+    # Docstring rules (we have docstrings where meaningful)
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D104",  # Missing docstring in public package
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in __init__
+    
+    # Complexity rules (sometimes legitimate to violate)
+    "PLR0911",  # Too many return statements
+    "PLR0912",  # Too many branches
+    "PLR0913",  # Too many arguments
+    "PLR0915",  # Too many statements
+    "PLR2004",  # Magic value used in comparison
+    
+    # Style preferences
+    "COM812",  # Trailing comma missing (conflicts with formatter)
+    "ISC001",  # Implicit string concatenation (conflicts with formatter)
+    
+    # Allow TODO/FIXME comments
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link in TODO
+    "FIX002", # Line contains TODO
+    
+    # Exception handling (sometimes broad catching is appropriate)
+    "BLE001",  # Blind except Exception
+    
+    # Boolean positional arguments (sometimes clear from context)
+    "FBT001",  # Boolean positional arg in function definition
+    "FBT002",  # Boolean default value in function definition
+    
+    # Print statements (we use logging, but some prints are intentional)
+    "T201",   # print() found (we use it in main output)
+    
+    # Annotations (we use strict mypy instead)
+    "ANN101",  # Missing type annotation for self
+    "ANN102",  # Missing type annotation for cls
+    
+    # Allow assert in tests
+    "S101",   # Use of assert detected
+    
+    # Private member access (intentional in same package)
+    "SLF001", # Private member accessed
+    
+    # Subprocess without shell=True is safe
+    "S603",   # subprocess call without shell=True
+    "S607",   # Starting a process with a partial path
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files can have additional violations
+"tests/**/*.py" = [
+    "D",        # No docstrings required in tests
+    "ANN",      # No annotations required in tests
+    "PLR2004",  # Magic values OK in tests
+    "S101",     # Assert OK in tests
+    "ARG",      # Unused arguments OK in fixtures
+    "PT011",    # pytest.raises() too broad (we test broad exceptions)
+]
+
+# Cleanup script can print and use os.system
+"cleanup.py" = [
+    "T201",     # Print OK in cleanup script
+]
+
+[tool.ruff.lint.pydocstyle]
+# Use Google-style docstrings
+convention = "google"
+
+[tool.ruff.lint.isort]
+# isort configuration (matches our import style)
+known-first-party = ["netcheck", "network", "utils", "models", "config", "enums"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.flake8-type-checking]
+# Enforce TYPE_CHECKING imports for type-only imports
+strict = true
+
+[tool.ruff.lint.pylint]
+# Pylint-style rules via ruff
+max-args = 10
+max-branches = 20
+max-returns = 8
+max-statements = 80
 
 # ============================================================================
 # Pylint Configuration  
@@ -132,7 +325,12 @@ py-version = "3.12"
 # Analyze all Python files recursively
 recursive = true
 
-# Ignore patterns (match mypy/pytest)
+# NOTE: Unlike pytest/mypy, pylint requires explicit paths as arguments
+# Run with: pylint .
+# Or create an alias: alias pylint='pylint .'
+# Or use the provided lint script: ./lint.sh
+
+# Consistent ignore patterns with other tools (regex format for pylint)
 ignore-paths = [
     "^build/.*$",
     "^dist/.*$",
@@ -169,13 +367,13 @@ disable = [
     # Access warnings (we use _private functions intentionally)
     "protected-access",            # Allow calling _private functions in same package
     
-    # Style warnings (handled by other tools)
-    "line-too-long",               # Handled by black (100 char limit)
+    # Style warnings (handled by ruff/black)
+    "line-too-long",               # Handled by ruff/black (100 char limit)
     "unnecessary-pass",            # Sometimes needed for clarity
     
-    # Import warnings (allow flexibility)
-    "wrong-import-order",          # isort handles this
-    "ungrouped-imports",           # isort handles this
+    # Import warnings (handled by ruff/isort)
+    "wrong-import-order",          # ruff handles this
+    "ungrouped-imports",           # ruff handles this
     
     # Exception warnings (sometimes we need broad catching)
     "broad-except",                # Sometimes catching Exception is appropriate
@@ -183,7 +381,7 @@ disable = [
 ]
 
 [tool.pylint.format]
-# Maximum line length (match black/mypy)
+# Maximum line length (match ruff/black/mypy)
 max-line-length = 100
 
 # Allow common short variable names

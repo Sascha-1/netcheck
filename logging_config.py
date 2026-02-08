@@ -28,7 +28,7 @@ class VerboseFilter(logging.Filter):
     DEBUG and INFO messages only pass when verbose mode is enabled.
 
     This allows users to run the tool in quiet mode (default) or verbose mode (-v).
-    
+
     UPDATED: Default mode now shows only WARNING+ (not INFO+)
     """
 
@@ -55,7 +55,7 @@ class VerboseFilter(logging.Filter):
         # WARNING and above always pass through
         if record.levelno >= logging.WARNING:
             return True
-        
+
         # DEBUG and INFO only pass in verbose mode
         return self.verbose
 
@@ -114,7 +114,7 @@ def setup_logging(
             - Shows WARNING and above only
             - Suppresses urllib3/requests DEBUG noise
             - Clean output for normal usage
-        
+
         Verbose mode (verbose=True):
             - Shows DEBUG and above for all loggers
             - Includes urllib3/requests connection details
@@ -137,11 +137,11 @@ def setup_logging(
         Default mode (quiet):
         >>> setup_logging(verbose=False)
         >>> # Only warnings/errors shown
-        
+
         Verbose mode (debugging):
         >>> setup_logging(verbose=True)
         >>> # Shows DEBUG, INFO, WARNING, ERROR, CRITICAL
-        
+
         With log file:
         >>> setup_logging(verbose=True, log_file=Path("netcheck.log"))
         >>> # Logs everything to file, respects verbose for console

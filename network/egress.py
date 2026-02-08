@@ -131,10 +131,10 @@ def get_ipv6_single_attempt(url: str, timeout: int) -> Optional[requests.Respons
     """
     try:
         response = requests.get(url, timeout=timeout)
-        
+
         if response.status_code == 200:
             return response
-        
+
         logger.debug("IPv6 query returned status %d (IPv6 may not be available)",
                    response.status_code)
         return None

@@ -4,17 +4,9 @@ Tests for network.vpn_underlay module.
 Tests VPN server endpoint detection and physical interface underlay detection.
 """
 
-from typing import Any, Dict, List, Optional, Generator
-from pathlib import Path
-from unittest.mock import MagicMock
-from _pytest.logging import LogCaptureFixture
-from _pytest.capture import CaptureFixture
-from _pytest.config import Config
-from _pytest.monkeypatch import MonkeyPatch
-
-
 import pytest
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, MagicMock
+
 from network.vpn_underlay import (
     get_vpn_connection_endpoint,
     get_vpn_server_endpoint,
@@ -22,7 +14,6 @@ from network.vpn_underlay import (
     detect_vpn_underlay
 )
 from models import InterfaceInfo
-
 
 
 class TestGetVpnConnectionEndpoint:

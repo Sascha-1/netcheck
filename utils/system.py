@@ -220,29 +220,29 @@ def is_valid_ipv6(address: Optional[str]) -> bool:
         import re
         ipv4_pattern = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$'
         match = re.search(ipv4_pattern, address)
-        
+
         if match:
             ipv4_part = match.group(1)
             # Validate the IPv4 part
             if not is_valid_ipv4(ipv4_part):
                 return False
-            
+
             # Get the IPv6 part (everything before the IPv4)
             ipv6_part = address[:match.start()]
-            
+
             # Remove trailing colon if present (but not if it's part of ::)
             if ipv6_part.endswith(':') and not ipv6_part.endswith('::'):
                 ipv6_part = ipv6_part[:-1]
-            
+
             # FIXED: Special case handling for :: prefix
             if ipv6_part == ':' or ipv6_part == '':
                 # This means the address was like ::192.0.2.1
                 # The :: represents the compressed zeros, which is valid
                 return True
-            
+
             if ipv6_part == '::':
                 return True
-            
+
             # Continue validating the IPv6 part
             address = ipv6_part
         else:
