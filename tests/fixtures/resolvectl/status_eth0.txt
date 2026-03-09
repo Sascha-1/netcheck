@@ -1,0 +1,12 @@
+Link 2 (eth0)
+      Current Scopes: DNS
+DefaultRoute setting: yes
+       LLMNR setting: yes
+MulticastDNS setting: no
+  DNSOverTLS setting: no
+      DNSSEC setting: no
+    DNSSEC supported: no
+  Current DNS Server: 192.168.1.1
+         DNS Servers: 192.168.1.1
+                      8.8.8.8
+          DNS Domain: ~.

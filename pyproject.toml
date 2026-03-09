@@ -1,0 +1,117 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "netcheck"
+dynamic = ["version"]
+description = "Network interface analysis tool for GNU/Linux"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "AGPL-3.0-or-later"}
+# Runtime dependency documented here for reference.
+# Installation is via "make install" which uses a .pth file -- no pip involved.
+# Install the dependency via apt: sudo apt install python3-requests
+#
+# The >=2.32 lower bound matches the Debian/Ubuntu apt package version
+# (python3-requests 2.32.3+dfsg-5 as of Debian 13 / Ubuntu 24.04).
+# 2.32.0 is also the minimum that includes the fix for CVE-2024-35195
+# (proxy credential leakage via session reuse).  No upper bound is set
+# because this tool is installed via .pth, not pip, and version resolution
+# is handled entirely by the system package manager.
+dependencies = ["requests>=2.32"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "netcheck.config.VERSION"}
+
+# ---------------------------------------------------------------------------
+# mypy -- strict type checking
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+pretty = true
+show_error_codes = true
+files = ["src/netcheck/", "tests/"]
+
+# ---------------------------------------------------------------------------
+# pylint -- static analysis
+# ---------------------------------------------------------------------------
+[tool.pylint.main]
+jobs = 0           # use all available CPU cores
+py-version = "3.12"
+fail-under = 10.0  # perfect score required
+
+[tool.pylint.design]
+max-attributes = 10
+max-args = 6
+max-returns = 12         # detect_interface_type has one return per priority step (11 steps)
+max-bool-expr = 5
+max-branches = 12
+max-locals = 15
+max-statements = 50
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint.logging]
+logging-format-style = "old"  # % style; safer than f-strings in log calls
+
+[tool.pylint."messages control"]
+# missing-function-docstring: test methods are self-documenting by name.
+# Class-level docstrings explain what each group tests; per-method docstrings
+# on test_foo() add noise without adding information.  All production functions
+# retain full docstrings.
+#
+# too-few-public-methods: suppressed per-class on Protocol interfaces and
+# their fakes (CommandRunner, HttpClient, HttpResponse, and test doubles).
+# Each suppressor carries a localised comment explaining the design intent.
+# See src/netcheck/utils/command.py, src/netcheck/utils/http.py, and tests/fakes.py.
+disable = ["missing-function-docstring"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "-m", "not integration",
+    "--cov=netcheck",
+    "--cov-report=term-missing",
+]
+
+# Custom markers -- must be declared here to use --strict-markers
+markers = [
+    "integration: requires a real Linux system with actual hardware and commands",
+    "slow: takes longer than one second (skip with -m 'not slow')",
+    "network: requires an active network connection",
+    "api: hits external APIs such as ipinfo.io (may be rate-limited)",
+]
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["netcheck"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

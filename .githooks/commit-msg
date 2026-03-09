@@ -1,0 +1,55 @@
+#!/bin/sh
+# .githooks/commit-msg
+#
+# Enforces CONTRIBUTING.md Rule 6: any commit that modifies
+# netcheck/core/enums.py or netcheck/core/models.py must include the word
+# "rationale" (case-insensitive) somewhere in the commit message.
+#
+# Install:
+#   git config core.hooksPath .githooks
+#
+# The hook receives the path to the file containing the commit message as $1.
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Check whether this commit touches the domain model files.
+# MERGE_HEAD and CHERRY_PICK_HEAD indicate non-interactive commits where
+# the diff is already committed; fall back to HEAD for those cases.
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+    CHANGED=$(git diff --cached --name-only)
+else
+    # Initial commit: no HEAD yet, compare against empty tree.
+    EMPTY_TREE=$(git hash-object -t tree /dev/null)
+    CHANGED=$(git diff --cached --name-only "$EMPTY_TREE")
+fi
+
+DOMAIN_CHANGED=0
+for f in $CHANGED; do
+    case "$f" in
+        netcheck/core/enums.py|netcheck/core/models.py)
+            DOMAIN_CHANGED=1
+            break
+            ;;
+    esac
+done
+
+if [ "$DOMAIN_CHANGED" -eq 0 ]; then
+    exit 0
+fi
+
+# Domain model files are touched -- require the rationale keyword.
+if echo "$COMMIT_MSG" | grep -qi "rationale"; then
+    exit 0
+fi
+
+echo ""
+echo "netcheck: commit rejected by .githooks/commit-msg"
+echo ""
+echo "  You modified netcheck/core/enums.py or netcheck/core/models.py."
+echo "  CONTRIBUTING.md Rule 6 requires a rationale in the commit message."
+echo ""
+echo "  Add a sentence containing the word 'rationale' explaining why the"
+echo "  domain model change is necessary, then commit again."
+echo ""
+exit 1

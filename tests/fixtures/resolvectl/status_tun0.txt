@@ -1,0 +1,11 @@
+Link 4 (tun0)
+      Current Scopes: DNS
+DefaultRoute setting: yes
+       LLMNR setting: yes
+MulticastDNS setting: no
+  DNSOverTLS setting: no
+      DNSSEC setting: no
+    DNSSEC supported: no
+  Current DNS Server: 10.8.0.1
+         DNS Servers: 10.8.0.1
+          DNS Domain: ~.

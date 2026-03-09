@@ -1,0 +1,14 @@
+modem.dbus-path                                    : /org/freedesktop/ModemManager1/Modem/0
+modem.generic.device-identifier                    : a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+modem.generic.manufacturer                         : Quectel
+modem.generic.model                                : EM05-G
+modem.generic.state                                : failed
+modem.generic.state-failed-reason                  : sim-missing
+modem.generic.power-state                          : low
+modem.generic.ports.length                         : 3
+modem.generic.ports.value[1]                       : cdc-wdm1 (mbim)
+modem.generic.ports.value[2]                       : ttyUSB0 (at)
+modem.generic.ports.value[3]                       : wwp195s0f3u4 (net)
+modem.generic.primary-port                         : cdc-wdm1
+modem.3gpp.registration-state                      : --
+modem.3gpp.packet-service-state                    : --

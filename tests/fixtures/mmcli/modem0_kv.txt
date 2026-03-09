@@ -1,0 +1,12 @@
+modem.dbus-path                                    : /org/freedesktop/ModemManager1/Modem/0
+modem.generic.device-identifier                    : a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2
+modem.generic.manufacturer                         : Quectel
+modem.generic.model                                : EM05-G
+modem.generic.state                                : connected
+modem.generic.state-failed-reason                  : none
+modem.generic.device                               : /sys/devices/pci0000:00/0000:00:1d.0/0000:03:00.0/0000:04:01.0/0000:05:00.0
+modem.generic.drivers                              : option, qmi_wwan
+modem.generic.ports                                : ttyUSB0 (at), ttyUSB1 (qcdm), ttyUSB2 (at), ttyUSB3 (at), wwp195s0f3u4 (net), cdc-wdm0 (qmi)
+modem.generic.primary-port                         : cdc-wdm0
+modem.generic.carrier-configuration               : default
+modem.generic.carrier-configuration-revision      : 0

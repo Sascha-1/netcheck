@@ -1,0 +1,8 @@
+Link 3 (wlp1s0)
+      Current Scopes: none
+DefaultRoute setting: no
+       LLMNR setting: yes
+MulticastDNS setting: no
+  DNSOverTLS setting: no
+      DNSSEC setting: no
+    DNSSEC supported: no
