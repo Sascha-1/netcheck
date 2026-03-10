@@ -16,6 +16,17 @@ from here rather than embedding literals.
     Interface name prefixes that unambiguously indicate a VPN tunnel without
     requiring a sysfs or kernel query.
 
+``VPN_NAME_SUBSTRINGS``
+    Substrings (anywhere in the lowercased name) that also indicate a VPN
+    tunnel.  Checked alongside ``VPN_NAME_PREFIXES`` by
+    ``_is_vpn_by_name`` in ``interfaces.py``.  Kept separate from
+    ``VPN_NAME_PREFIXES`` because a substring match is semantically
+    different from a prefix match; conflating them in one tuple would
+    require the caller to know which entries are prefixes and which are
+    free substrings.  The canonical example is ``"vpn"``, which matches
+    ``pvpnksintrf0`` (ProtonVPN kill-switch) but does not appear at the
+    start of the name.
+
 ``IPINFO_URL`` / ``IPINFO_IPV6_URL``
     Endpoint URLs for the ipinfo.io API.  The IPv4 URL uses the default
     endpoint (always returns an IPv4-sourced response); the IPv6 URL forces
@@ -63,6 +74,11 @@ PUBLIC_DNS_SERVERS: Final[frozenset[str]] = frozenset(
 )
 
 VPN_NAME_PREFIXES: Final[tuple[str, ...]] = ("tun", "tap", "wg", "ppp")
+
+# Interface name substrings (matched anywhere in the lowercased name) that
+# also indicate a VPN tunnel.  See the module docstring for the rationale
+# for keeping this separate from VPN_NAME_PREFIXES.
+VPN_NAME_SUBSTRINGS: Final[tuple[str, ...]] = ("vpn",)
 
 IPINFO_URL: Final[str] = "https://ipinfo.io/json"
 IPINFO_IPV6_URL: Final[str] = "https://v6.ipinfo.io/json"

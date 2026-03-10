@@ -82,7 +82,7 @@ and keeps the function testable with ``FakeSysfsReader`` and
 import re
 from typing import Final
 
-from netcheck.config import VPN_NAME_PREFIXES
+from netcheck.config import VPN_NAME_PREFIXES, VPN_NAME_SUBSTRINGS
 from netcheck.core.enums import InterfaceType
 from netcheck.core.models import DeviceInfo
 from netcheck.hardware.pci import get_pci_device_name, read_pci_ids
@@ -292,7 +292,7 @@ def _is_vpn_by_name(iface_name: str) -> bool:
         ``True`` if the name matches a VPN prefix pattern.
     """
     lower = iface_name.lower()
-    if "vpn" in lower:
+    if any(s in lower for s in VPN_NAME_SUBSTRINGS):
         return True
     return any(lower.startswith(prefix) for prefix in VPN_NAME_PREFIXES)
 
