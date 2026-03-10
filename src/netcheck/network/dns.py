@@ -312,6 +312,51 @@ def _compute_leak_status(
     return DnsLeakStatus.WARN
 
 
+def _should_skip_leak_detection(iface: InterfaceInfo) -> bool:
+    """Return ``True`` when ``_with_leak_status`` must assign ``NOT_APPLICABLE``.
+
+    Two independent conditions both mandate ``NOT_APPLICABLE``; this helper
+    encapsulates them so that the action (assigning ``NOT_APPLICABLE``) is
+    written exactly once in ``_with_leak_status``.
+
+    **Condition 1 -- structural exclusion.**
+    The interface type is not in ``_DNS_PROVIDER_TYPES`` (loopback, VPN,
+    bridge, virtual, unknown) *and* ``current_server`` is ``None``.
+    These types cannot step aside for a VPN: they never act as DNS providers
+    to begin with, so ``DORMANT`` is semantically incorrect for them.
+    A non-DNS-provider type with an active ``current_server`` is not
+    short-circuited here; it proceeds to ``_compute_leak_status`` normally,
+    where it may receive ``OK`` (e.g. a VPN interface whose resolver is in
+    ``vpn_dns``).
+
+    **Condition 2 -- state-based exclusion.**
+    The interface is a DNS-provider type *but* its DNS query status is not
+    ``OK`` and it has no ``current_server``.  This covers DNS-provider
+    interfaces that have never provided DNS in their current state -- for
+    example a cellular modem with no SIM (``query_status=UNAVAILABLE``,
+    ``servers=()``).  Labelling such an interface ``DORMANT`` would
+    misrepresent it as having stepped aside for a VPN, implying prior DNS
+    activity that never occurred.
+
+    Both conditions share the ``current_server is None`` sub-condition.
+    When ``current_server`` is set, neither condition can fire and the
+    function returns ``False`` immediately.
+
+    Args:
+        iface: The interface under evaluation.
+
+    Returns:
+        ``True`` if ``NOT_APPLICABLE`` must be assigned; ``False`` if
+        ``_compute_leak_status`` should be called instead.
+    """
+    if iface.dns.current_server is not None:
+        return False
+    return (
+        iface.interface_type not in _DNS_PROVIDER_TYPES
+        or iface.dns.query_status != DataStatus.OK
+    )
+
+
 def _with_leak_status(
     iface: InterfaceInfo,
     vpn_dns: frozenset[str],
@@ -319,25 +364,15 @@ def _with_leak_status(
 ) -> InterfaceInfo:
     """Return a copy of ``iface`` with ``dns.leak_status`` computed.
 
-    Only ``_DNS_PROVIDER_TYPES`` (ethernet, wireless, cellular, tether) can
-    be ``DORMANT``.  These are the interfaces that receive DNS from DHCP or
-    static configuration and hand off to the VPN interface when a tunnel is
-    active.
+    Delegates the skip decision to ``_should_skip_leak_detection``, which
+    encapsulates the two independent conditions that both mandate
+    ``NOT_APPLICABLE`` (structural exclusion by interface type, and
+    state-based exclusion for DNS-provider types with no DNS activity).
+    See ``_should_skip_leak_detection`` for the full rationale.
 
-    All other interface types -- loopback, VPN, bridge, virtual, unknown --
-    are assigned ``NOT_APPLICABLE`` when ``current_server`` is ``None``,
-    because the DORMANT/LEAK distinction is meaningless for them.  A VPN
-    interface whose ``current_server`` is populated (e.g. ``proton0``) is
-    not short-circuited by this guard and proceeds to ``_compute_leak_status``
-    normally, where it receives ``OK`` if its server is in ``vpn_dns``.
-
-    Additionally, any interface whose DNS query status is not ``OK`` and has
-    no ``current_server`` -- regardless of type -- receives ``NOT_APPLICABLE``.
-    This covers interfaces that are structurally a DNS-provider type but have
-    never provided DNS and cannot in their current state (e.g. a cellular modem
-    with no SIM, ``modem_state=failed``).  Labelling such an interface
-    ``DORMANT`` would misrepresent it as having stepped aside for a VPN,
-    implying prior DNS activity that never occurred.
+    When neither skip condition applies, delegates to
+    ``_compute_leak_status`` for the full DORMANT/LEAK/OK/PUBLIC/WARN
+    classification.
 
     Args:
         iface: The interface to update.
@@ -347,16 +382,7 @@ def _with_leak_status(
     Returns:
         New ``InterfaceInfo`` with updated ``dns.leak_status``.
     """
-    if (
-        iface.interface_type not in _DNS_PROVIDER_TYPES
-        and iface.dns.current_server is None
-    ):
-        new_dns = dataclasses.replace(iface.dns, leak_status=DnsLeakStatus.NOT_APPLICABLE)
-        return dataclasses.replace(iface, dns=new_dns)
-    if (
-        iface.dns.query_status != DataStatus.OK
-        and iface.dns.current_server is None
-    ):
+    if _should_skip_leak_detection(iface):
         new_dns = dataclasses.replace(iface.dns, leak_status=DnsLeakStatus.NOT_APPLICABLE)
         return dataclasses.replace(iface, dns=new_dns)
     status = _compute_leak_status(iface.dns, vpn_dns, isp_dns)
