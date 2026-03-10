@@ -200,7 +200,8 @@ def _row_color(iface: InterfaceInfo) -> str:
         # is intentionally absent.  Any VPN interface without an active
         # ``current_server`` -- whether a kill-switch or one using an
         # external resolver -- receives ``dns_leak_status=NOT_APPLICABLE``
-        # from the ``_DNS_PROVIDER_TYPES`` guard in ``check_dns_leaks``.
+        # from the ``_DNS_PROVIDER_TYPES`` guard in ``check_dns_leaks``
+        # (VPN is not a DNS-provider type, so it is structurally excluded).
         # These two scenarios are indistinguishable at the ``leak_status``
         # level, so the conservative choice is to require DNS OK for GREEN.
         if leak == DnsLeakStatus.OK:
@@ -353,7 +354,8 @@ def _legend_lines() -> list[str]:
         f"  {_YELLOW}YELLOW {_RESET}  (dns:public)          Public resolver -- no ISP leak",
         f"  {_YELLOW}YELLOW {_RESET}  (dns:warn)            Unrecognised resolver -- investigate",
         "           (dns:dormant)          VPN active; interface stepped aside, not routing DNS",
-        "           (dns:not_applicable)   No VPN active, or interface not currently routing DNS",
+        "           (dns:not_applicable)   Interface excluded from DNS leak detection",
+        "           (dns:no_vpn)           No VPN active; DNS leak detection not applicable",
         "",
         "Missing data:",
         "  N/A  Field does not apply to this interface type by design",

@@ -34,7 +34,7 @@ classification requires a system-wide view.
     regardless of whether those interfaces are currently active.
 
 **Per-interface classification** (uses ``current_server`` only):
-    1. If no VPN is active (``vpn_dns`` is empty): ``NOT_APPLICABLE``.
+    1. If no VPN is active (``vpn_dns`` is empty): ``NO_VPN``.
     2. If ``current_server`` is ``None``: ``DORMANT`` -- the VPN is active
        and this interface has correctly stepped aside; systemd-resolved is
        not routing queries through it.  This is a positive security signal:
@@ -267,9 +267,9 @@ def _compute_leak_status(
     is dormant: systemd-resolved has shifted the active DNS designation to
     the VPN interface.  This is a positive security signal -- the VPN's DNS
     isolation is working -- and is represented as ``DORMANT`` rather than
-    ``NOT_APPLICABLE``.  The two are semantically distinct: ``NOT_APPLICABLE``
-    means the VPN precondition is not met; ``DORMANT`` means the precondition
-    is met and this interface correctly stepped aside.
+    ``NO_VPN``.  The two are semantically distinct: ``NO_VPN`` means no VPN
+    is active system-wide; ``DORMANT`` means the VPN precondition is met and
+    this interface correctly stepped aside.
 
     Args:
         dns_config: The interface's DNS configuration.
@@ -280,7 +280,7 @@ def _compute_leak_status(
         The computed ``DnsLeakStatus``.
     """
     if not vpn_dns:
-        return DnsLeakStatus.NOT_APPLICABLE
+        return DnsLeakStatus.NO_VPN
 
     active = dns_config.current_server
     if active is None:

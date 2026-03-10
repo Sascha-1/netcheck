@@ -121,12 +121,12 @@ class TestCheckDnsLeaks:
         check_dns_leaks([eth])
         assert eth.dns.leak_status == original_status
 
-    def test_no_vpn_all_not_applicable(self) -> None:
-        # When no VPN interface exists, vpn_dns is empty -> NOT_APPLICABLE.
+    def test_no_vpn_all_no_vpn_status(self) -> None:
+        # When no VPN interface exists, vpn_dns is empty -> NO_VPN.
         eth = _iface("eth0", InterfaceType.ETHERNET, ("192.168.1.1",),
                      current_server="192.168.1.1")
         result = check_dns_leaks([eth])
-        assert result[0].dns.leak_status == DnsLeakStatus.NOT_APPLICABLE
+        assert result[0].dns.leak_status == DnsLeakStatus.NO_VPN
 
     def test_vpn_dns_gets_ok(self) -> None:
         # VPN interface with an active current_server in vpn_dns -> OK.
@@ -186,9 +186,12 @@ class TestDormantClassification:
 
     DORMANT means: a VPN is active AND this DNS-provider interface has no
     current DNS activity (current_server is None).
-    NOT_APPLICABLE means: either no VPN is active, or the interface type is
-    not a DNS provider (loopback, VPN, bridge, virtual, unknown).
-    These are two different facts about the system and must not be aliased.
+    NOT_APPLICABLE means: the interface type is not a DNS provider (loopback,
+    VPN, bridge, virtual, unknown), or it is a DNS-provider type that has no
+    DNS activity and no VPN is stepping it aside.
+    NO_VPN means: no VPN is active system-wide; leak detection has nothing to
+    compare against.
+    These are three distinct facts about the system and must not be aliased.
     """
 
     def test_dormant_when_vpn_active_and_no_current_server(self) -> None:
@@ -202,15 +205,15 @@ class TestDormantClassification:
         eth_out = next(r for r in result if r.name == "eth0")
         assert eth_out.dns.leak_status == DnsLeakStatus.DORMANT
 
-    def test_not_applicable_when_no_vpn_and_no_current_server(self) -> None:
+    def test_no_vpn_status_when_no_vpn_and_no_current_server(self) -> None:
         """Interface with no current_server and NO VPN active must be
-        NOT_APPLICABLE, not DORMANT.  The VPN precondition is not met."""
+        NO_VPN, not DORMANT.  The VPN precondition is not met."""
         eth = _iface("eth0", InterfaceType.ETHERNET, ("192.168.1.1",),
                      current_server=None)
         # no VPN interface in the list
         result = check_dns_leaks([eth])
         eth_out = result[0]
-        assert eth_out.dns.leak_status == DnsLeakStatus.NOT_APPLICABLE
+        assert eth_out.dns.leak_status == DnsLeakStatus.NO_VPN
 
     def test_loopback_is_not_applicable_when_vpn_active(self) -> None:
         """Loopback must be NOT_APPLICABLE even when a VPN is active.

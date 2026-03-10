@@ -131,10 +131,33 @@ class DnsLeakStatus(StrEnum):
         physical interfaces went dormant when the VPN connected.
 
     ``NOT_APPLICABLE``
-        No VPN is active on the system.  The concept of a DNS leak does not
-        arise because there is no VPN tunnel whose DNS configuration could
-        be bypassed.  Also used as a pre-computation placeholder until
-        ``check_dns_leaks`` assigns the real status.
+        This interface is structurally or operationally excluded from DNS
+        leak detection, regardless of VPN state.  Two conditions produce
+        this status:
+
+        - The interface type is not a DNS provider (loopback, VPN, bridge,
+          virtual, unknown): such interfaces never act as DNS providers and
+          cannot meaningfully step aside for a VPN.
+        - The interface is a DNS-provider type (ethernet, wireless, cellular,
+          tether) but has no current DNS activity in its present state
+          (``query_status`` is not ``OK`` and ``current_server`` is ``None``):
+          labelling it ``DORMANT`` would imply prior DNS activity that never
+          occurred.
+
+        Also used as a pre-computation placeholder until ``check_dns_leaks``
+        assigns the real status.
+
+    ``NO_VPN``
+        No VPN interface is active on the system.  The concept of a DNS
+        leak does not arise because there is no VPN tunnel to compare DNS
+        servers against.  This is a run-level state that affects every
+        interface when ``vpn_dns`` is empty.
+
+        Distinct from ``NOT_APPLICABLE``: ``NO_VPN`` is a conclusive
+        statement about the VPN state of the system.  ``NOT_APPLICABLE``
+        is a statement about this interface's structural or operational
+        participation in DNS routing, and can be assigned even when a VPN
+        is active elsewhere on the system.
     """
 
     LEAK = "leak"
@@ -143,6 +166,7 @@ class DnsLeakStatus(StrEnum):
     OK = "ok"
     DORMANT = "dormant"
     NOT_APPLICABLE = "not_applicable"
+    NO_VPN = "no_vpn"
 
 
 class EgressStatus(StrEnum):

@@ -370,8 +370,18 @@ class TestRowColorExtended:
         assert _row_color(iface) == ""
 
     def test_not_applicable_gets_no_color(self) -> None:
-        """NOT_APPLICABLE (no VPN active) must also produce no color."""
+        """NOT_APPLICABLE (interface excluded from leak detection) must produce no color."""
         iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.NOT_APPLICABLE))
+        assert _row_color(iface) == ""
+
+    def test_no_vpn_gets_no_color(self) -> None:
+        """NO_VPN (no VPN active system-wide) must also produce no color.
+
+        NO_VPN falls through all explicit leak-status branches in _row_color
+        because none of LEAK/WARN/PUBLIC/OK apply.  An interface with NO_VPN
+        and no egress activity has no color.
+        """
+        iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.NO_VPN))
         assert _row_color(iface) == ""
 
     def test_warn_leak_gets_yellow(self) -> None:

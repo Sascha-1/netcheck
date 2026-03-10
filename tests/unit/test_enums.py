@@ -113,8 +113,8 @@ class TestDnsLeakStatus:
     """Tests for DnsLeakStatus enumeration."""
 
     def test_all_members_exist(self) -> None:
-        """All six leak-status classifications must be present."""
-        expected = {"OK", "PUBLIC", "LEAK", "WARN", "DORMANT", "NOT_APPLICABLE"}
+        """All seven leak-status classifications must be present."""
+        expected = {"OK", "PUBLIC", "LEAK", "WARN", "DORMANT", "NOT_APPLICABLE", "NO_VPN"}
         assert {m.name for m in DnsLeakStatus} == expected
 
     @pytest.mark.parametrize("member, expected_value", [
@@ -124,6 +124,7 @@ class TestDnsLeakStatus:
         (DnsLeakStatus.OK,             "ok"),
         (DnsLeakStatus.DORMANT,        "dormant"),
         (DnsLeakStatus.NOT_APPLICABLE, "not_applicable"),
+        (DnsLeakStatus.NO_VPN,         "no_vpn"),
     ])
     def test_string_value(
         self, member: DnsLeakStatus, expected_value: str
@@ -169,10 +170,11 @@ class TestDnsLeakStatus:
     def test_dormant_is_semantically_distinct_from_not_applicable(self) -> None:
         """DORMANT and NOT_APPLICABLE must be distinct members with distinct values.
 
-        They encode different facts: NOT_APPLICABLE means no VPN is active
-        (the leak precondition is not met); DORMANT means a VPN IS active
-        and this interface correctly stepped aside.  They must never be
-        accidentally aliased.
+        They encode different facts: NOT_APPLICABLE means this interface is
+        structurally or operationally excluded from DNS leak detection
+        regardless of VPN state; DORMANT means a VPN IS active and this
+        interface correctly stepped aside.  They must never be accidentally
+        aliased.
 
         The set-cardinality assertion is the correct way to prove enum
         distinctness under mypy strict: two equal enum members would collapse
@@ -185,8 +187,8 @@ class TestDnsLeakStatus:
         assert len({DnsLeakStatus.DORMANT, DnsLeakStatus.NOT_APPLICABLE}) == 2
 
     def test_member_count(self) -> None:
-        """There must be exactly six members."""
-        assert len(list(DnsLeakStatus)) == 6
+        """There must be exactly seven members."""
+        assert len(list(DnsLeakStatus)) == 7
 
     def test_all_members_are_distinct(self) -> None:
         """No two members may share the same string value."""

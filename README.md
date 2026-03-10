@@ -49,7 +49,8 @@ Color coding and JSON `dns_leak_status` values:
 | YELLOW  | `public`           | Public resolver (Cloudflare/Google/Quad9) -- no ISP leak, but suboptimal |
 | YELLOW  | `warn`             | Unrecognised resolver -- investigate |
 | none    | `dormant`          | VPN active; interface stepped aside, not currently routing DNS |
-| none    | `not_applicable`   | No VPN active, or interface not currently routing DNS |
+| none    | `not_applicable`   | Interface excluded from DNS leak detection (structural or operational) |
+| none    | `no_vpn`           | No VPN active; DNS leak detection not applicable |
 
 Table cell values:
 
