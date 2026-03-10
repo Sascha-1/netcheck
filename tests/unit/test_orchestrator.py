@@ -15,7 +15,9 @@ Test groups
 ``TestCollectNetworkDataEdgeCases``
     No interfaces found -> empty list.
     No active interface (no default route) -> all egress UNAVAILABLE.
-    Interface processing exception -> that interface skipped, others kept.
+    OSError from _build_interface -> that interface skipped, others kept.
+    RuntimeError from _build_interface -> that interface skipped, others kept.
+    ValueError from _build_interface -> propagates (programming error).
 
 ``TestFetchEgress``
     Active interface -> delegates to get_egress_info.
@@ -30,6 +32,8 @@ Test groups
     Loopback -> routing NOT_APPLICABLE (no ip route show dev call needed).
     Cellular -> modem info attached when ModemManager reports the interface.
 """
+
+import pytest
 
 from netcheck.core.enums import DataStatus, DnsLeakStatus, EgressStatus, InterfaceType
 from netcheck.core.models import InterfaceInfo
@@ -102,6 +106,95 @@ def _build_vpn_client() -> FakeHttpClient:
         "https://v6.ipinfo.io/json": None,
     })
 
+
+# ---------------------------------------------------------------------------
+# Test doubles for exception-handling tests
+# ---------------------------------------------------------------------------
+
+class _ErrorReader:
+    """SysfsReader test double that raises a given exception for one interface.
+
+    All five ``SysfsReader`` protocol methods are implemented so that mypy
+    strict accepts this class wherever a ``SysfsReader`` is expected.  Every
+    method delegates to a plain ``FakeSysfsReader`` except ``device_path``:
+    when called with the configured ``failing`` interface name it raises
+    ``exc`` instead of returning a value.
+
+    ``device_path`` is the first sysfs call made during
+    ``detect_interface_type`` (and therefore during ``_build_interface``), so
+    the exception surfaces at the very start of per-interface processing --
+    before any domain model is constructed.  This makes it the minimal,
+    stable injection point for testing the exception handler in
+    ``collect_network_data`` without using ``unittest.mock``.
+
+    Args:
+        failing: Interface name that triggers the exception.
+        exc:     Exception instance to raise when ``device_path(failing)``
+                 is called.
+    """
+
+    def __init__(self, failing: str, exc: Exception) -> None:
+        self._failing = failing
+        self._exc = exc
+        self._fallback = FakeSysfsReader()
+
+    def device_path(self, iface: str) -> str | None:
+        """Raise ``self._exc`` for the failing interface; delegate otherwise."""
+        if iface == self._failing:
+            raise self._exc
+        return self._fallback.device_path(iface)
+
+    def read_file(self, path: str, filename: str) -> str | None:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.read_file(path, filename)
+
+    def read_link_name(self, path: str, link_name: str) -> str | None:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.read_link_name(path, link_name)
+
+    def parent_path(self, path: str) -> str | None:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.parent_path(path)
+
+    def dir_exists(self, path: str) -> bool:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.dir_exists(path)
+
+
+def _build_exception_test_runner() -> FakeCommandRunner:
+    """Runner for a lo + eth0 two-interface scenario used by exception-handler tests.
+
+    ``eth0`` is the interface that will fail via ``_ErrorReader``; the
+    exception is raised inside ``detect_interface_type`` before any
+    per-interface commands (``resolvectl``, ``ip route show dev``) are
+    reached, so those commands are intentionally absent from this mapping.
+
+    Only the batch commands (needed before the per-interface loop) and
+    ``lo``'s per-interface commands are present.  ``ip route show`` is
+    omitted because ``_apply_vpn_underlay`` returns early when no VPN
+    interfaces are in the result list.
+    """
+    return FakeCommandRunner({
+        ("mmcli", "-L"): "",
+        ("ip", "route", "show", "default"): None,
+        ("ip", "-4", "addr", "show"): (
+            "1: lo: <LOOPBACK,UP>\n"
+            "    inet 127.0.0.1/8 scope host lo\n"
+            "2: eth0: <BROADCAST,UP>\n"
+            "    inet 192.168.1.10/24 scope global eth0\n"
+        ),
+        ("ip", "-6", "addr", "show"): "",
+        ("ip", "-o", "link", "show"): (
+            "1: lo: <LOOPBACK,UP> mtu 65536\n"
+            "2: eth0: <BROADCAST,UP> mtu 1500"
+        ),
+        ("resolvectl", "status", "lo"): _LOOPBACK_RESOLV,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Test classes
+# ---------------------------------------------------------------------------
 
 class TestCollectNetworkDataHappyPath:
     """collect_network_data with lo + eth0 + tun0."""
@@ -200,7 +293,20 @@ class TestCollectNetworkDataHappyPath:
 
 
 class TestCollectNetworkDataEdgeCases:
-    """collect_network_data under abnormal conditions."""
+    """collect_network_data under abnormal conditions.
+
+    Exception-handler policy
+    ------------------------
+    ``OSError`` and ``RuntimeError`` raised inside ``_build_interface`` are
+    caught: the affected interface is skipped with a warning log and
+    processing of remaining interfaces continues.
+
+    ``ValueError`` is NOT caught: it propagates out of
+    ``collect_network_data``.  ``ValueError`` is raised by the domain-model
+    ``__post_init__`` validators (``DeviceInfo``, ``IPConfig``, ``VPNInfo``)
+    when a caller passes an invalid argument combination -- a programming
+    error that must not be silenced.
+    """
 
     def test_no_interfaces_returns_empty_list(self) -> None:
         runner = FakeCommandRunner({
@@ -298,6 +404,37 @@ class TestCollectNetworkDataEdgeCases:
         })
         result = collect_network_data(runner, FakeSysfsReader(), FakeHttpClient({}))
         assert not result
+
+    def test_oserror_in_build_interface_skips_that_interface(self) -> None:
+        """OSError from _build_interface must skip that interface; others kept."""
+        runner = _build_exception_test_runner()
+        reader = _ErrorReader("eth0", OSError("sysfs read failed"))
+        result = collect_network_data(runner, reader, FakeHttpClient({}))
+        names = {i.name for i in result}
+        assert "lo" in names
+        assert "eth0" not in names
+
+    def test_runtimeerror_in_build_interface_skips_that_interface(self) -> None:
+        """RuntimeError from _build_interface must skip that interface; others kept."""
+        runner = _build_exception_test_runner()
+        reader = _ErrorReader("eth0", RuntimeError("unexpected module fault"))
+        result = collect_network_data(runner, reader, FakeHttpClient({}))
+        names = {i.name for i in result}
+        assert "lo" in names
+        assert "eth0" not in names
+
+    def test_valueerror_in_build_interface_propagates(self) -> None:
+        """ValueError from _build_interface must propagate out of collect_network_data.
+
+        ValueError is raised by __post_init__ validators on domain models
+        (DeviceInfo, IPConfig, VPNInfo) when an invariant is violated.  This
+        is a programming error -- not an operational failure -- and must not
+        be caught by the per-interface handler.
+        """
+        runner = _build_exception_test_runner()
+        reader = _ErrorReader("eth0", ValueError("DeviceInfo invariant violated"))
+        with pytest.raises(ValueError, match="DeviceInfo invariant violated"):
+            collect_network_data(runner, reader, FakeHttpClient({}))
 
 
 class TestFetchEgress:

@@ -23,8 +23,19 @@ Collection sequence
 
 Failure handling
 ----------------
-If an individual interface cannot be processed, it is skipped with a
-warning log.  Processing of remaining interfaces continues.
+If an individual interface cannot be processed due to an OS-level failure
+(``OSError``) or an explicit runtime fault raised by a network or hardware
+module (``RuntimeError``), it is skipped with a warning log and processing
+of remaining interfaces continues.
+
+``ValueError`` is intentionally not caught.  The domain models
+(``DeviceInfo``, ``IPConfig``, ``VPNInfo``) raise ``ValueError`` from their
+``__post_init__`` validators when a caller constructs a model with an invalid
+argument combination -- for example, ``status=OK`` paired with ``name=None``
+on ``DeviceInfo``.  This is a programming error, not a runtime operational
+failure, and must not be silenced.  Catching it here would hide bugs
+introduced by future refactors: the only symptom would be a missing
+interface in the output, with no indication of the underlying cause.
 
 If the egress query fails, ``EgressInfo.create_failed()`` is attached to
 the active interface.  All other interfaces receive
@@ -129,7 +140,11 @@ def collect_network_data(
         try:
             iface = _build_interface(name, ctx, runner, reader)
             interfaces.append(iface)
-        except (OSError, ValueError, RuntimeError) as exc:
+        except (OSError, RuntimeError) as exc:
+            # OSError: subprocess or sysfs failure -- operational, skip and continue.
+            # RuntimeError: explicit fault raised by a network or hardware module.
+            # ValueError is deliberately excluded: it indicates a domain-model
+            # invariant violation (a programming error) and must propagate.
             logger.warning("Skipping %s: %s", name, exc)
 
     # Step 8: DNS leak detection (returns new list)
