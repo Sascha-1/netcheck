@@ -15,7 +15,10 @@ checkable protocol -- not used here, as ``SysfsReader`` is not
 ``@runtime_checkable``; static checking by mypy strict is sufficient).
 """
 
+import os
 import pathlib
+
+import pytest
 
 from netcheck.utils.sysfs import SysfsReader, SystemSysfsReader
 from tests.fakes import FakeSysfsReader
@@ -187,6 +190,27 @@ class TestSystemSysfsReaderWithTmpFilesystem:
         reader = SystemSysfsReader()
         assert reader.read_file(str(d), "nonexistent") is None
 
+    def test_read_file_target_is_directory_returns_none(self, tmp_path: pathlib.Path) -> None:
+        """read_file must return None when the named entry is a directory.
+
+        ``Path.read_text()`` raises ``IsADirectoryError`` (a subclass of
+        ``OSError``, errno 21) when the target exists but is a directory
+        rather than a regular file.  ``pathlib`` does not suppress errno 21
+        (only errno 2, 9, 20, 40 are in ``_IGNORED_ERRNOS``), so the error
+        propagates from ``read_text()`` to the ``except OSError`` handler,
+        which normalises it to ``None``.
+
+        This test covers lines 163-164 in ``sysfs.py`` (the except clause
+        and pass in ``read_file``).  No permission manipulation is required:
+        the ``IsADirectoryError`` is raised by ``read_text()`` itself, not
+        by the ``exists()`` check that precedes it.
+        """
+        d = tmp_path / "dev"
+        d.mkdir()
+        (d / "vendor").mkdir()  # "vendor" is a directory, not a regular file
+        reader = SystemSysfsReader()
+        assert reader.read_file(str(d), "vendor") is None
+
     def test_read_link_name_returns_target_name(self, tmp_path: pathlib.Path) -> None:
         """read_link_name must return the final path component of a symlink target."""
         target_dir = tmp_path / "drivers" / "cdc_ether"
@@ -202,6 +226,30 @@ class TestSystemSysfsReaderWithTmpFilesystem:
         d.mkdir()
         reader = SystemSysfsReader()
         assert reader.read_link_name(str(d), "driver") is None
+
+    @pytest.mark.skipif(os.getuid() == 0, reason="root bypasses file-permission checks")
+    def test_read_link_name_permission_denied_returns_none(self, tmp_path: pathlib.Path) -> None:
+        """read_link_name must return None when the directory is inaccessible.
+
+        When the directory passed as ``path`` has mode 000, any attempt to
+        access entries inside it raises ``PermissionError`` (errno 13,
+        EACCES).  ``pathlib`` does not suppress errno 13 (only errno 2, 9,
+        20, 40 are in ``_IGNORED_ERRNOS``), so ``Path.exists()`` re-raises
+        the error.  The ``except OSError`` handler in ``read_link_name``
+        catches it and returns ``None``.
+
+        This test covers lines 181-182 in ``sysfs.py`` (the except clause
+        and pass in ``read_link_name``).  The skip guard is required because
+        root ignores POSIX permission bits.
+        """
+        restricted = tmp_path / "restricted"
+        restricted.mkdir(mode=0o000)
+        reader = SystemSysfsReader()
+        try:
+            result = reader.read_link_name(str(restricted), "driver")
+            assert result is None
+        finally:
+            restricted.chmod(0o755)  # restore so tmp_path teardown can clean up
 
     def test_device_path_returns_resolved_target(self, tmp_path: pathlib.Path) -> None:
         """device_path resolves a symlink when called on a real path.
@@ -269,3 +317,31 @@ class TestSystemSysfsReaderDirExists:
         f.write_text("x")
         reader = SystemSysfsReader()
         assert reader.dir_exists(str(f)) is False
+
+    @pytest.mark.skipif(os.getuid() == 0, reason="root bypasses file-permission checks")
+    def test_dir_exists_permission_denied_returns_false(self, tmp_path: pathlib.Path) -> None:
+        """dir_exists must return False when the target's parent is inaccessible.
+
+        ``Path.is_dir()`` calls ``stat()``, which raises ``PermissionError``
+        (errno 13, EACCES) when a directory component of the path is not
+        executable.  ``pathlib`` does not suppress errno 13, so the error
+        propagates from ``is_dir()`` to the ``except OSError`` handler in
+        ``dir_exists``, which returns ``False``.
+
+        This test covers lines 212-213 in ``sysfs.py`` (the except clause
+        and return False in ``dir_exists``).  The skip guard is required
+        because root ignores POSIX permission bits.
+        """
+        parent = tmp_path / "parent"
+        parent.mkdir()
+        subdir = parent / "subdir"
+        subdir.mkdir()
+        # Remove all permissions from parent: stat(parent/subdir) now raises
+        # PermissionError because the kernel cannot resolve the path component.
+        parent.chmod(0o000)
+        reader = SystemSysfsReader()
+        try:
+            result = reader.dir_exists(str(subdir))
+            assert result is False
+        finally:
+            parent.chmod(0o755)  # restore so tmp_path teardown can clean up
