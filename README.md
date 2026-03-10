@@ -49,7 +49,7 @@ Color coding and JSON `dns_leak_status` values:
 | YELLOW  | `public`           | Public resolver (Cloudflare/Google/Quad9) -- no ISP leak, but suboptimal |
 | YELLOW  | `warn`             | Unrecognised resolver -- investigate |
 | none    | `dormant`          | VPN active; interface stepped aside, not currently routing DNS |
-| none    | `not_applicable`   | Interface type does not participate in DNS routing |
+| none    | `not_applicable`   | No VPN active, or interface not currently routing DNS |
 
 Table cell values:
 
@@ -183,7 +183,7 @@ rather than a binary pass/fail.
       "metric": null,
       "vpn_server_ip": "198.51.100.1",
       "vpn_server_ip_status": "ok",
-      "carries_vpn": false,
+      "is_vpn_underlay": false,
       "modem_state": null,
       "modem_state_reason": null
     }

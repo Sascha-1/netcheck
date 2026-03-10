@@ -66,8 +66,8 @@ class TestRowColor:
         ))
         assert _row_color(iface) == _GREEN
 
-    def test_carries_vpn_gets_cyan(self) -> None:
-        assert _row_color(make_output_iface(IfaceSpec(carries_vpn=True))) == _CYAN
+    def test_is_vpn_underlay_gets_cyan(self) -> None:
+        assert _row_color(make_output_iface(IfaceSpec(is_vpn_underlay=True))) == _CYAN
 
     def test_direct_internet_gets_red(self) -> None:
         assert _row_color(make_output_iface(IfaceSpec(egress_status=EgressStatus.OK))) == _RED
@@ -79,8 +79,8 @@ class TestRowColor:
         ))
         assert _row_color(iface) == ""
 
-    def test_leak_beats_carries_vpn(self) -> None:
-        iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.LEAK, carries_vpn=True))
+    def test_leak_beats_is_vpn_underlay(self) -> None:
+        iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.LEAK, is_vpn_underlay=True))
         assert _row_color(iface) == _MAGENTA
 
 

@@ -205,7 +205,7 @@ def _row_color(iface: InterfaceInfo) -> str:
         # level, so the conservative choice is to require DNS OK for GREEN.
         if leak == DnsLeakStatus.OK:
             return _GREEN
-    if iface.vpn.carries_vpn:
+    if iface.vpn.is_vpn_underlay:
         return _CYAN
     if egress_ok and itype in _PHYSICAL_TYPES:
         # RED signals an unprotected internet-facing physical interface.
@@ -353,7 +353,7 @@ def _legend_lines() -> list[str]:
         f"  {_YELLOW}YELLOW {_RESET}  (dns:public)          Public resolver -- no ISP leak",
         f"  {_YELLOW}YELLOW {_RESET}  (dns:warn)            Unrecognised resolver -- investigate",
         "           (dns:dormant)          VPN active; interface stepped aside, not routing DNS",
-        "           (dns:not_applicable)   Interface type does not participate in DNS routing",
+        "           (dns:not_applicable)   No VPN active, or interface not currently routing DNS",
         "",
         "Missing data:",
         "  N/A  Field does not apply to this interface type by design",

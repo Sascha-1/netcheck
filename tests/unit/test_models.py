@@ -298,45 +298,45 @@ class TestVPNInfo:
         v = VPNInfo.not_applicable()
         assert v.server_ip is None
         assert v.server_ip_status == DataStatus.NOT_APPLICABLE
-        assert v.carries_vpn is False
+        assert v.is_vpn_underlay is False
 
     def test_unavailable_factory(self) -> None:
         v = VPNInfo.unavailable()
         assert v.server_ip is None
         assert v.server_ip_status == DataStatus.UNAVAILABLE
-        assert v.carries_vpn is False
+        assert v.is_vpn_underlay is False
 
     def test_error_factory(self) -> None:
         v = VPNInfo.error()
         assert v.server_ip is None
         assert v.server_ip_status == DataStatus.ERROR
 
-    def test_error_factory_with_carries_vpn(self) -> None:
-        v = VPNInfo.error(carries_vpn=True)
-        assert v.carries_vpn is True
+    def test_error_factory_with_is_vpn_underlay(self) -> None:
+        v = VPNInfo.error(is_vpn_underlay=True)
+        assert v.is_vpn_underlay is True
 
     def test_ok_factory(self) -> None:
         v = VPNInfo.ok("5.253.204.194")
         assert v.server_ip == "5.253.204.194"
         assert v.server_ip_status == DataStatus.OK
-        assert v.carries_vpn is False
+        assert v.is_vpn_underlay is False
 
-    def test_ok_factory_with_carries_vpn(self) -> None:
-        v = VPNInfo.ok("5.253.204.194", carries_vpn=True)
-        assert v.carries_vpn is True
+    def test_ok_factory_with_is_vpn_underlay(self) -> None:
+        v = VPNInfo.ok("5.253.204.194", is_vpn_underlay=True)
+        assert v.is_vpn_underlay is True
 
     def test_ok_with_none_server_ip_raises(self) -> None:
         """VPNInfo invariant: status OK requires a non-None server_ip."""
         with pytest.raises(ValueError, match="invariant"):
-            VPNInfo(server_ip=None, server_ip_status=DataStatus.OK, carries_vpn=False)
+            VPNInfo(server_ip=None, server_ip_status=DataStatus.OK, is_vpn_underlay=False)
 
     def test_non_ok_with_server_ip_raises(self) -> None:
         """VPNInfo invariant: non-OK status requires server_ip to be None."""
         with pytest.raises(ValueError, match="invariant"):
             VPNInfo(server_ip="1.2.3.4", server_ip_status=DataStatus.UNAVAILABLE,
-                    carries_vpn=False)
+                    is_vpn_underlay=False)
 
     def test_frozen(self) -> None:
         v = VPNInfo.unavailable()
         with pytest.raises(FrozenInstanceError):
-            v.carries_vpn = True  # type: ignore[misc]
+            v.is_vpn_underlay = True  # type: ignore[misc]

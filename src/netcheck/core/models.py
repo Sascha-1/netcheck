@@ -325,7 +325,7 @@ class VPNInfo:
     ``server_ip_status == OK`` if and only if ``server_ip is not None``.
     This invariant is enforced at construction time by ``__post_init__``.
 
-    ``carries_vpn`` is ``True`` when this physical interface is the underlay
+    ``is_vpn_underlay`` is ``True`` when this physical interface is the underlay
     that carries an active VPN tunnel's traffic (i.e. the tunnel's packets
     travel over this interface before encryption/decryption).
 
@@ -334,13 +334,13 @@ class VPNInfo:
     ``VPNInfo.unavailable()``        -- no qualifying route found.
     ``VPNInfo.error()``              -- route query failed.
     ``VPNInfo.ok(server_ip)``        -- server endpoint confirmed.
-    All three accept an optional ``carries_vpn`` keyword argument
+    All three accept an optional ``is_vpn_underlay`` keyword argument
     (default ``False``).
     """
 
     server_ip: str | None
     server_ip_status: DataStatus
-    carries_vpn: bool
+    is_vpn_underlay: bool
 
     def __post_init__(self) -> None:
         """Enforce the server_ip/status invariant at construction time.
@@ -359,14 +359,14 @@ class VPNInfo:
             )
 
     @classmethod
-    def unavailable(cls, *, carries_vpn: bool = False) -> "VPNInfo":
+    def unavailable(cls, *, is_vpn_underlay: bool = False) -> "VPNInfo":
         """Return a ``VPNInfo`` when no VPN server route was found.
 
         Use when ``ip route show`` succeeded but contained no qualifying
         static host route to a public address.
 
         Args:
-            carries_vpn: Whether this interface carries VPN tunnel traffic.
+            is_vpn_underlay: Whether this interface carries VPN tunnel traffic.
 
         Returns:
             ``VPNInfo`` with ``server_ip_status=UNAVAILABLE``,
@@ -375,18 +375,18 @@ class VPNInfo:
         return cls(
             server_ip=None,
             server_ip_status=DataStatus.UNAVAILABLE,
-            carries_vpn=carries_vpn,
+            is_vpn_underlay=is_vpn_underlay,
         )
 
     @classmethod
-    def error(cls, *, carries_vpn: bool = False) -> "VPNInfo":
+    def error(cls, *, is_vpn_underlay: bool = False) -> "VPNInfo":
         """Return a ``VPNInfo`` when the route query command failed.
 
         Use when ``ip route show`` produced no output or exited with a
         non-zero code.
 
         Args:
-            carries_vpn: Whether this interface carries VPN tunnel traffic.
+            is_vpn_underlay: Whether this interface carries VPN tunnel traffic.
 
         Returns:
             ``VPNInfo`` with ``server_ip_status=ERROR``, ``server_ip=None``.
@@ -394,11 +394,11 @@ class VPNInfo:
         return cls(
             server_ip=None,
             server_ip_status=DataStatus.ERROR,
-            carries_vpn=carries_vpn,
+            is_vpn_underlay=is_vpn_underlay,
         )
 
     @classmethod
-    def not_applicable(cls, *, carries_vpn: bool = False) -> "VPNInfo":
+    def not_applicable(cls, *, is_vpn_underlay: bool = False) -> "VPNInfo":
         """Return a ``VPNInfo`` for interface types that cannot be VPN endpoints.
 
         Use for loopback, ethernet, wireless, cellular, tether, bridge, and
@@ -406,7 +406,7 @@ class VPNInfo:
         concept of a VPN server endpoint does not apply.
 
         Args:
-            carries_vpn: Whether this interface carries VPN tunnel traffic.
+            is_vpn_underlay: Whether this interface carries VPN tunnel traffic.
 
         Returns:
             ``VPNInfo`` with ``server_ip_status=NOT_APPLICABLE``,
@@ -415,17 +415,17 @@ class VPNInfo:
         return cls(
             server_ip=None,
             server_ip_status=DataStatus.NOT_APPLICABLE,
-            carries_vpn=carries_vpn,
+            is_vpn_underlay=is_vpn_underlay,
         )
 
     @classmethod
-    def ok(cls, server_ip: str, *, carries_vpn: bool = False) -> "VPNInfo":
+    def ok(cls, server_ip: str, *, is_vpn_underlay: bool = False) -> "VPNInfo":
         """Return a ``VPNInfo`` with a confirmed VPN server endpoint.
 
         Args:
             server_ip: Public IP address of the VPN server, from a static
                 host route in the kernel routing table.
-            carries_vpn: Whether this interface carries VPN tunnel traffic.
+            is_vpn_underlay: Whether this interface carries VPN tunnel traffic.
 
         Returns:
             ``VPNInfo`` with ``server_ip_status=OK`` and ``server_ip``
@@ -434,7 +434,7 @@ class VPNInfo:
         return cls(
             server_ip=server_ip,
             server_ip_status=DataStatus.OK,
-            carries_vpn=carries_vpn,
+            is_vpn_underlay=is_vpn_underlay,
         )
 
 

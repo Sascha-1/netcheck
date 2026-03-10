@@ -90,7 +90,7 @@ class IfaceSpec:  # pylint: disable=too-many-instance-attributes,too-few-public-
         Explicit ``EgressInfo``; overrides ``egress_status`` when provided.
     egress_status:
         Used to synthesise ``EgressInfo`` when ``egress`` is ``None``.
-    carries_vpn:
+    is_vpn_underlay:
         Whether this interface is the physical underlay for a VPN tunnel.
     server_ip:
         VPN server IP detected from static host routes.
@@ -109,7 +109,7 @@ class IfaceSpec:  # pylint: disable=too-many-instance-attributes,too-few-public-
     metric: int | None = None
     egress: EgressInfo | None = None
     egress_status: EgressStatus = EgressStatus.UNAVAILABLE
-    carries_vpn: bool = False
+    is_vpn_underlay: bool = False
     server_ip: str | None = None
     modem: ModemInfo | None = None
 
@@ -168,11 +168,11 @@ def make_iface(spec: IfaceSpec) -> InterfaceInfo:
             metric=spec.metric,
         ),
         vpn=(
-            VPNInfo.ok(spec.server_ip, carries_vpn=spec.carries_vpn)
+            VPNInfo.ok(spec.server_ip, is_vpn_underlay=spec.is_vpn_underlay)
             if spec.server_ip is not None
-            else VPNInfo.not_applicable(carries_vpn=spec.carries_vpn)
+            else VPNInfo.not_applicable(is_vpn_underlay=spec.is_vpn_underlay)
             if spec.interface_type != InterfaceType.VPN
-            else VPNInfo.unavailable(carries_vpn=spec.carries_vpn)
+            else VPNInfo.unavailable(is_vpn_underlay=spec.is_vpn_underlay)
         ),
         modem=spec.modem,
     )

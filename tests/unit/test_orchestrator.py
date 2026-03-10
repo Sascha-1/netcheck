@@ -268,13 +268,13 @@ class TestCollectNetworkDataHappyPath:
         """eth0 must be flagged as the VPN underlay carrier."""
         result = self._run()
         eth = next(i for i in result if i.name == "eth0")
-        assert eth.vpn.carries_vpn is True
+        assert eth.vpn.is_vpn_underlay is True
 
     def test_vpn_interface_not_flagged_as_carrier(self) -> None:
         """The VPN interface itself must not carry_vpn=True."""
         result = self._run()
         tun = next(i for i in result if i.name == "tun0")
-        assert tun.vpn.carries_vpn is False
+        assert tun.vpn.is_vpn_underlay is False
 
     def test_dns_leak_detection_applied(self) -> None:
         """DNS leak statuses must not all remain NOT_APPLICABLE after collection."""
@@ -475,7 +475,7 @@ class TestApplyVpnUnderlay:
         result = _apply_vpn_underlay(ifaces, runner)
         assert len(result) == 2
         assert all(i.vpn.server_ip is None for i in result)
-        assert all(not i.vpn.carries_vpn for i in result)
+        assert all(not i.vpn.is_vpn_underlay for i in result)
 
     def test_no_vpn_makes_no_route_show_call(self) -> None:
         runner = FakeCommandRunner({})
@@ -525,7 +525,7 @@ class TestApplyVpnUnderlay:
         ))
         result = _apply_vpn_underlay([tun, eth], runner)
         eth_out = next(i for i in result if i.name == "eth0")
-        assert eth_out.vpn.carries_vpn is True
+        assert eth_out.vpn.is_vpn_underlay is True
 
     def test_carrier_not_flagged_twice(self) -> None:
         """Two VPN interfaces sharing one carrier must not double-flag it."""
@@ -542,8 +542,8 @@ class TestApplyVpnUnderlay:
         ))
         result = _apply_vpn_underlay([tun0, tun1, eth], runner)
         eth_out = next(i for i in result if i.name == "eth0")
-        # carries_vpn is a bool; True once is the same as True twice.
-        assert eth_out.vpn.carries_vpn is True
+        # is_vpn_underlay is a bool; True once is the same as True twice.
+        assert eth_out.vpn.is_vpn_underlay is True
 
     def test_vpn_server_ip_set_when_no_carrier_found(self) -> None:
         """Server endpoint found but no physical carrier -> server_ip still populated.
@@ -560,7 +560,7 @@ class TestApplyVpnUnderlay:
         leaving only the VPN interface itself in the list.
 
         The VPN interface must still receive ``server_ip``; the
-        ``carries_vpn`` flag must not be set on any interface because there
+        ``is_vpn_underlay`` flag must not be set on any interface because there
         is no carrier to flag.
         """
         runner = FakeCommandRunner({
@@ -573,7 +573,7 @@ class TestApplyVpnUnderlay:
         tun_out = next(i for i in result if i.name == "tun0")
         assert tun_out.vpn.server_ip == "5.253.204.194"
         assert tun_out.vpn.server_ip_status == DataStatus.OK
-        assert all(not i.vpn.carries_vpn for i in result)
+        assert all(not i.vpn.is_vpn_underlay for i in result)
 
     def test_original_list_not_mutated(self) -> None:
         """_apply_vpn_underlay must never modify the input list in place."""
@@ -591,4 +591,4 @@ class TestApplyVpnUnderlay:
         original_ids = [id(i) for i in original]
         _apply_vpn_underlay(original, runner)
         assert [id(i) for i in original] == original_ids
-        assert not original[1].vpn.carries_vpn  # original eth unchanged
+        assert not original[1].vpn.is_vpn_underlay  # original eth unchanged

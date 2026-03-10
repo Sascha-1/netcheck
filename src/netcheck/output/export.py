@@ -104,7 +104,7 @@ class InterfaceRecord(TypedDict):
     # VPN
     vpn_server_ip: str | None
     vpn_server_ip_status: str
-    carries_vpn: bool
+    is_vpn_underlay: bool
     # Modem (cellular interfaces only)
     modem_state: str | None
     modem_state_reason: str | None
@@ -214,7 +214,7 @@ def _interface_to_dict(iface: InterfaceInfo) -> InterfaceRecord:
         "metric": iface.routing.metric,
         "vpn_server_ip": iface.vpn.server_ip,
         "vpn_server_ip_status": iface.vpn.server_ip_status.value,
-        "carries_vpn": iface.vpn.carries_vpn,
+        "is_vpn_underlay": iface.vpn.is_vpn_underlay,
         "modem_state": modem_state,
         "modem_state_reason": modem_state_reason,
     }

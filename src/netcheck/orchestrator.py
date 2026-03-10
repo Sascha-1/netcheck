@@ -18,7 +18,7 @@ Collection sequence
     (immutable pattern; original list discarded).
 9.  Detect VPN underlay: resolve the VPN server endpoint and physical carrier
     interface once (both are system-wide properties); update the carrier with
-    ``vpn.carries_vpn = True``, then update every VPN interface with the
+    ``vpn.is_vpn_underlay = True``, then update every VPN interface with the
     server IP.  All updates use ``dataclasses.replace`` (immutable pattern).
 
 Failure handling
@@ -286,7 +286,7 @@ def _apply_vpn_underlay(
     Execution sequence:
     1.  Determine the VPN server endpoint from static host routes (one call).
     2.  Find the physical underlay carrier by metric priority (one call).
-    3.  Set ``vpn.carries_vpn = True`` on the carrier interface (if found).
+    3.  Set ``vpn.is_vpn_underlay = True`` on the carrier interface (if found).
     4.  Update every VPN interface with the server endpoint result:
 
         - If ``server_ip`` is found: call ``VPNInfo.ok(server_ip)`` on every
@@ -346,7 +346,7 @@ def _apply_vpn_underlay(
         logger.debug("VPN underlay carrier: %s", carrier_name)
         j = idx[carrier_name]
         carrier = result[j]
-        new_carrier_vpn = dataclasses.replace(carrier.vpn, carries_vpn=True)
+        new_carrier_vpn = dataclasses.replace(carrier.vpn, is_vpn_underlay=True)
         result[j] = dataclasses.replace(carrier, vpn=new_carrier_vpn)
     else:
         logger.debug("No VPN carrier found in interface list")
@@ -354,7 +354,7 @@ def _apply_vpn_underlay(
     for i in vpn_indices:
         iface = result[i]
         logger.debug("Updating VPN interface %s with server_ip=%s", iface.name, server_ip)
-        new_vpn = VPNInfo.ok(server_ip, carries_vpn=iface.vpn.carries_vpn)
+        new_vpn = VPNInfo.ok(server_ip, is_vpn_underlay=iface.vpn.is_vpn_underlay)
         result[i] = dataclasses.replace(iface, vpn=new_vpn)
 
     return result
