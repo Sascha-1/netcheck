@@ -172,6 +172,44 @@ class TestGetAllIPv6AddressesExtended:
         assert status == DataStatus.OK
         assert addrs.get("eth0") == "2001:db8::1"
 
+    def test_inet6_line_before_interface_header_ignored(self) -> None:
+        """An indented inet6 line with no preceding interface header must be ignored.
+
+        ``current_iface`` starts as ``None``.  If the very first line is
+        already indented and contains ``inet6 ``, the compound condition
+        ``line.strip().startswith("inet6 ") and current_iface is not None``
+        evaluates True/False -- the entire ``elif`` body is skipped.
+
+        This exercises the False arm of the ``current_iface is not None``
+        sub-condition (partial branch in ``get_all_ipv6_addresses``).
+        """
+        output = "    inet6 2001:db8::1/64 scope global\n"
+        runner = FakeCommandRunner({("ip", "-6", "addr", "show"): output})
+        addrs, status = get_all_ipv6_addresses(runner)
+        assert status == DataStatus.OK
+        assert not addrs
+
+    def test_inet6_line_with_no_extractable_address_ignored(self) -> None:
+        """An inet6 line whose address field does not match the regex is ignored.
+
+        The regex ``inet6\\s+([0-9a-f:]+)`` requires at least one hex digit
+        or colon before the slash.  A malformed line such as ``inet6 /64``
+        produces no match, so ``addr_match`` is ``None`` and the
+        ``if addr_match:`` branch is not taken -- the interface is not added
+        to the result dict.
+
+        This exercises the False arm of the ``if addr_match:`` branch
+        (partial branch in ``get_all_ipv6_addresses``).
+        """
+        output = (
+            "2: eth0: <BROADCAST,UP>\n"
+            "    inet6 /64 scope global\n"
+        )
+        runner = FakeCommandRunner({("ip", "-6", "addr", "show"): output})
+        addrs, status = get_all_ipv6_addresses(runner)
+        assert status == DataStatus.OK
+        assert "eth0" not in addrs
+
 
 class TestGetAllIPv4AddressesExtended:
     """get_all_ipv4_addresses: additional parsing edge cases."""
@@ -211,3 +249,41 @@ class TestGetAllIPv4AddressesExtended:
         addrs, status = get_all_ipv4_addresses(runner)
         assert status == DataStatus.OK
         assert not addrs
+
+    def test_inet_line_before_interface_header_ignored(self) -> None:
+        """An indented inet line with no preceding interface header must be ignored.
+
+        ``current_iface`` starts as ``None``.  If the very first line is
+        already indented (starts with a space) and contains ``inet ``, the
+        compound condition ``line.strip().startswith("inet ") and
+        current_iface is not None`` evaluates True/False -- the entire
+        ``elif`` body is skipped.
+
+        This exercises the False arm of the ``current_iface is not None``
+        sub-condition (partial branch in ``get_all_ipv4_addresses``).
+        """
+        output = "    inet 10.0.0.1/24 scope global eth0\n"
+        runner = FakeCommandRunner({("ip", "-4", "addr", "show"): output})
+        addrs, status = get_all_ipv4_addresses(runner)
+        assert status == DataStatus.OK
+        assert not addrs
+
+    def test_inet_line_with_no_extractable_ip_ignored(self) -> None:
+        """An inet line whose address field does not match the regex is ignored.
+
+        The regex ``inet\\s+([0-9.]+)`` requires at least one digit before
+        the slash.  A malformed line such as ``inet /24`` produces no match,
+        so ``addr_match`` is ``None`` and the ``if addr_match:`` branch is
+        not taken -- the interface is not added to the result dict.
+
+        This exercises the False arm of the ``if addr_match:`` branch
+        (partial branch in ``get_all_ipv4_addresses``).
+        """
+        output = (
+            "2: eth0: <BROADCAST,UP>\n"
+            "    inet /24 scope global eth0\n"
+        )
+        runner = FakeCommandRunner({("ip", "-4", "addr", "show"): output})
+        addrs, status = get_all_ipv4_addresses(runner)
+        assert status == DataStatus.OK
+        assert "eth0" not in addrs
