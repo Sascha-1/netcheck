@@ -545,6 +545,36 @@ class TestApplyVpnUnderlay:
         # carries_vpn is a bool; True once is the same as True twice.
         assert eth_out.vpn.carries_vpn is True
 
+    def test_vpn_server_ip_set_when_no_carrier_found(self) -> None:
+        """Server endpoint found but no physical carrier -> server_ip still populated.
+
+        This exercises the ``else`` branch of the carrier-detection block in
+        ``_apply_vpn_underlay`` (orchestrator.py line 222):
+
+            else:
+                logger.debug("No VPN carrier found in interface list")
+
+        The branch fires when ``get_vpn_server_endpoint`` succeeds but
+        ``find_vpn_carrier`` returns ``None`` -- for example when the physical
+        underlay interface has been removed while the VPN tunnel is still up,
+        leaving only the VPN interface itself in the list.
+
+        The VPN interface must still receive ``server_ip``; the
+        ``carries_vpn`` flag must not be set on any interface because there
+        is no carrier to flag.
+        """
+        runner = FakeCommandRunner({
+            ("ip", "route", "show"): "5.253.204.194 proto static",
+        })
+        # Only the VPN interface is present.  find_vpn_carrier excludes VPN
+        # interfaces by design, so it returns None immediately.
+        tun = make_output_iface(IfaceSpec(name="tun0", interface_type=InterfaceType.VPN))
+        result = _apply_vpn_underlay([tun], runner)
+        tun_out = next(i for i in result if i.name == "tun0")
+        assert tun_out.vpn.server_ip == "5.253.204.194"
+        assert tun_out.vpn.server_ip_status == DataStatus.OK
+        assert all(not i.vpn.carries_vpn for i in result)
+
     def test_original_list_not_mutated(self) -> None:
         """_apply_vpn_underlay must never modify the input list in place."""
         runner = FakeCommandRunner({
