@@ -9,6 +9,92 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+**DNS leak detection**
+
+- `DnsLeakStatus.NO_VPN` (`"no_vpn"`) — new enum member that replaces
+  `NOT_APPLICABLE` in the specific case where no VPN interface is active
+  system-wide.  `NOT_APPLICABLE` now means only structural or operational
+  exclusion of this interface from leak detection, regardless of VPN state.
+  `NO_VPN` is a conclusive statement about the VPN state of the whole system;
+  `NOT_APPLICABLE` is a statement about this interface's participation in DNS
+  routing.  Downstream consumers that treat unknown values as `not_applicable`
+  are unaffected by the addition.
+
+### Changed
+
+**JSON schema** *(breaking)*
+
+- `carries_vpn` renamed to `is_vpn_underlay` in every interface record.
+  The old name described the field from the VPN's point of view (the VPN
+  carries traffic over this interface); the new name describes it from the
+  interface's point of view (this interface is the physical underlay carrying
+  VPN traffic), which matches how the field is read in the display and export
+  layers.  Downstream JSON consumers must update the field name.
+
+**DNS leak detection**
+
+- `dns_leak_status: "not_applicable"` now means only that this specific
+  interface is structurally or operationally excluded from leak detection --
+  either because its type never acts as a DNS provider (loopback, VPN, bridge,
+  virtual, unknown), or because it is a DNS-provider type with no current DNS
+  activity in its present state.  The VPN-absence case is now reported as
+  `"no_vpn"` (see Added above).
+
+- VPN name-substring detection is now driven by the `VPN_NAME_SUBSTRINGS`
+  constant in `src/netcheck/config/__init__.py`, eliminating a hardcoded
+  `"vpn"` string inside `src/netcheck/network/interfaces.py`.  Behaviour is
+  unchanged; the constant is now the single authoritative source for
+  name-based VPN detection alongside the existing `VPN_NAME_PREFIXES`.
+
+**Output**
+
+- Table legend entry for `dns:not_applicable` updated from "No VPN active, or
+  interface not currently routing DNS" to "Interface excluded from DNS leak
+  detection", accurately reflecting the narrowed semantics after the
+  introduction of `no_vpn`.
+- Table legend entry for `dns:no_vpn` added: "No VPN active; DNS leak
+  detection not applicable".
+
+**Documentation**
+
+- README: new `### dns_leak_detected signal` subsection added under JSON
+  output, documenting that `dns_leak_detected: false` is a security-positive
+  signal only when `vpn_active: true`.  When `vpn_active: false` the field
+  confirms there is no active VPN through which a leak could occur, but does
+  not imply DNS privacy.  A three-row lookup table makes the combinations
+  explicit for monitoring systems and scripting consumers.
+- README: colour table updated to reflect the `not_applicable` / `no_vpn`
+  distinction; `is_vpn_underlay` field name corrected in the JSON example.
+
+### Fixed
+
+**DNS leak detection**
+
+- `DNSConfig` docstring for `OK` and `UNAVAILABLE` states corrected.  The
+  `OK` bullet previously omitted the requirement that `servers` is non-empty;
+  the `UNAVAILABLE` bullet did not state that `servers` is empty.
+
+- `_with_leak_status` previously contained two independent guard conditions
+  written inline, both producing a `NOT_APPLICABLE` assignment.  Extracted
+  into a `_should_skip_leak_detection(iface)` helper with a single assignment
+  site and a full docstring explaining both conditions and their shared
+  `current_server is None` sub-condition.
+
+**Test coverage**
+
+- `tests/unit/test_orchestrator.py`: added test covering the no-carrier branch
+  (lines 132--133) where `_apply_vpn_underlay` sets `vpn_server_ip` on VPN
+  interfaces even when no physical underlay carrier is found.
+- `tests/unit/utils/test_sysfs.py`: added tests for three OS-error paths in
+  `SystemSysfsReader` -- `read_file` target-is-directory, `read_link_name`
+  permission-denied, and `dir_exists` permission-denied.
+- `tests/unit/network/test_addressing.py`: added four tests covering the
+  `False` arms of `current_iface is not None` and `if addr_match:` in both
+  `get_all_ipv4_addresses` and `get_all_ipv6_addresses`, bringing
+  `addressing.py` to 100% branch coverage.
+
 ---
 
 ## [1.1.0] - 2026-03-09

@@ -198,6 +198,28 @@ rather than a binary pass/fail.
 server endpoint (a static host route to the server was found in the routing
 table) or is the active egress path.
 
+### dns_leak_detected signal
+
+`summary.dns_leak_detected` is a security-positive signal **only when
+`vpn_active` is also `true`**.
+
+When `vpn_active: true` and `dns_leak_detected: false`, no interface is
+actively resolving DNS through an ISP server while the VPN is running.  DNS
+isolation is working.
+
+When `vpn_active: false` and `dns_leak_detected: false`, the field is
+technically correct -- there is no active VPN tunnel through which a leak
+could occur -- but it does **not** imply DNS privacy.  All DNS traffic is
+going directly to whatever resolver each interface is configured to use, which
+is typically the ISP's own resolver.  Monitoring systems must correlate both
+fields before drawing a privacy conclusion:
+
+```
+vpn_active: true  + dns_leak_detected: false  →  DNS is private
+vpn_active: true  + dns_leak_detected: true   →  DNS leak, action required
+vpn_active: false + dns_leak_detected: false  →  No VPN; DNS goes to ISP
+```
+
 ## Design principles
 
 Netcheck is written to the standard of mission-critical diagnostic software.
