@@ -2,8 +2,8 @@
 # .githooks/commit-msg
 #
 # Enforces CONTRIBUTING.md Rule 6: any commit that modifies
-# netcheck/core/enums.py or netcheck/core/models.py must include the word
-# "rationale" (case-insensitive) somewhere in the commit message.
+# src/netcheck/core/enums.py or src/netcheck/core/models.py must include the
+# word "rationale" (case-insensitive) somewhere in the commit message.
 #
 # Install:
 #   git config core.hooksPath .githooks
@@ -27,7 +27,7 @@ fi
 DOMAIN_CHANGED=0
 for f in $CHANGED; do
     case "$f" in
-        netcheck/core/enums.py|netcheck/core/models.py)
+        src/netcheck/core/enums.py|src/netcheck/core/models.py)
             DOMAIN_CHANGED=1
             break
             ;;
@@ -46,7 +46,7 @@ fi
 echo ""
 echo "netcheck: commit rejected by .githooks/commit-msg"
 echo ""
-echo "  You modified netcheck/core/enums.py or netcheck/core/models.py."
+echo "  You modified src/netcheck/core/enums.py or src/netcheck/core/models.py."
 echo "  CONTRIBUTING.md Rule 6 requires a rationale in the commit message."
 echo ""
 echo "  Add a sentence containing the word 'rationale' explaining why the"
