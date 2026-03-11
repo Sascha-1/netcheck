@@ -24,7 +24,7 @@ code, where a function accepting ``str`` receives an enum member directly.
 
 import pytest
 
-from netcheck.core.enums import DnsLeakStatus, EgressStatus, InterfaceType
+from netcheck.core.enums import DataStatus, DnsLeakStatus, EgressStatus, InterfaceType
 
 
 class TestInterfaceType:
@@ -241,3 +241,121 @@ class TestEgressStatus:
     def test_member_count(self) -> None:
         """There must be exactly three members."""
         assert len(list(EgressStatus)) == 3
+
+
+class TestDataStatus:
+    """Tests for DataStatus enumeration.
+
+    ``DataStatus`` is the most widely used enum in the codebase: it appears
+    on ``DeviceInfo``, ``DNSConfig``, ``IPConfig``, ``RoutingInfo``, and
+    ``VPNInfo``.  Its four members encode distinct reasons why a data field
+    may lack a value, replacing the ambiguous ``None`` convention:
+
+    - ``OK``             -- data present and valid.
+    - ``NOT_APPLICABLE`` -- field does not apply to this interface type by
+                           design; no query was attempted.
+    - ``UNAVAILABLE``    -- query succeeded but returned no data for a
+                           legitimate operational reason.
+    - ``ERROR``          -- query was attempted and failed.
+
+    The ``NOT_APPLICABLE`` / ``UNAVAILABLE`` / ``ERROR`` distinction matters
+    at the display layer: they render as ``"N/A"``, ``"--"``, and ``"ERR"``
+    respectively.  Collapsing any two of them would lose information.
+    """
+
+    def test_all_members_exist(self) -> None:
+        """All four data-status values must be present."""
+        expected = {"OK", "NOT_APPLICABLE", "UNAVAILABLE", "ERROR"}
+        assert {m.name for m in DataStatus} == expected
+
+    @pytest.mark.parametrize("member, expected_value", [
+        (DataStatus.OK,             "ok"),
+        (DataStatus.NOT_APPLICABLE, "not_applicable"),
+        (DataStatus.UNAVAILABLE,    "unavailable"),
+        (DataStatus.ERROR,          "error"),
+    ])
+    def test_string_value(
+        self, member: DataStatus, expected_value: str
+    ) -> None:
+        """Each member must carry the correct lower-case string value.
+
+        Adding a new member without an entry here causes an immediate, named
+        failure (``test_string_value[<MEMBER>-<value>]``) rather than a
+        silent gap in coverage.
+        """
+        assert member.value == expected_value
+
+    def test_str_mixin_widens_to_str(self) -> None:
+        """A member assigned to a ``str`` variable must equal its value string.
+
+        This is the idiomatic mypy-clean way to verify the ``StrEnum`` mixin:
+        widening to ``str`` matches how the domain layer passes enum members
+        to functions that accept plain strings.
+        """
+        as_str: str = DataStatus.OK
+        assert as_str == "ok"
+
+        as_str = DataStatus.ERROR
+        assert as_str == "error"
+
+    def test_construction_from_string(self) -> None:
+        """Constructing a member from its string value must succeed."""
+        assert DataStatus("ok") is DataStatus.OK
+        assert DataStatus("not_applicable") is DataStatus.NOT_APPLICABLE
+        assert DataStatus("unavailable") is DataStatus.UNAVAILABLE
+        assert DataStatus("error") is DataStatus.ERROR
+
+    def test_invalid_value_raises(self) -> None:
+        """An unknown string must raise ``ValueError``."""
+        with pytest.raises(ValueError):
+            DataStatus("missing")
+
+    def test_member_count(self) -> None:
+        """There must be exactly four members."""
+        assert len(list(DataStatus)) == 4
+
+    def test_all_members_are_distinct(self) -> None:
+        """No two members may share the same string value."""
+        values = [m.value for m in DataStatus]
+        assert len(values) == len(set(values))
+
+    def test_values_are_not_display_sentinels(self) -> None:
+        """No member value must be a display-layer sentinel string.
+
+        The display layer maps DataStatus members to ``"N/A"``, ``"--"``, and
+        ``"ERR"``.  The domain values must remain distinct from those strings
+        so that the mapping is unambiguous and reversible.
+        """
+        display_sentinels = {"--", "N/A", "ERR", "NONE", "QUERY FAILED"}
+        for member in DataStatus:
+            assert member.value not in display_sentinels, (
+                f"DataStatus.{member.name} value '{member.value}' "
+                f"collides with a display sentinel"
+            )
+
+    def test_not_applicable_and_unavailable_are_distinct(self) -> None:
+        """NOT_APPLICABLE and UNAVAILABLE must be distinct members.
+
+        They encode categorically different facts: NOT_APPLICABLE means the
+        field is structurally inapplicable to this interface type (no query
+        was ever attempted); UNAVAILABLE means a query ran and returned no
+        data.  Conflating them would make it impossible to distinguish
+        ``DeviceInfo`` on a loopback (NOT_APPLICABLE -- hardware is not a
+        concept for loopback) from ``DeviceInfo`` on a physical interface
+        with an unidentified device (UNAVAILABLE -- sysfs returned nothing).
+
+        Set cardinality is the mypy-clean way to assert enum distinctness;
+        see the analogous test in ``TestDnsLeakStatus`` for the rationale.
+        """
+        assert len({DataStatus.NOT_APPLICABLE, DataStatus.UNAVAILABLE}) == 2
+
+    def test_unavailable_and_error_are_distinct(self) -> None:
+        """UNAVAILABLE and ERROR must be distinct members.
+
+        UNAVAILABLE means the query succeeded but produced no data (e.g. an
+        interface with no default route configured).  ERROR means the query
+        itself failed (e.g. ``resolvectl`` returned a non-zero exit code).
+        The display layer renders them differently (``"--"`` vs ``"ERR"``);
+        collapsing them would remove actionable diagnostic information.
+        """
+        assert len({DataStatus.UNAVAILABLE, DataStatus.ERROR}) == 2
