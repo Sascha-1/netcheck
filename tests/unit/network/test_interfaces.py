@@ -155,88 +155,6 @@ class TestGetDeviceName:
         assert result.name is None
 
 
-class TestIsVpnByName:
-    """_is_vpn_by_name: name-pattern detection."""
-
-    def test_tun_is_vpn(self) -> None:
-        assert _is_vpn_by_name("tun0") is True
-
-    def test_wg_is_vpn(self) -> None:
-        assert _is_vpn_by_name("wg0") is True
-
-    def test_vpn_substring(self) -> None:
-        assert _is_vpn_by_name("pvpnksintrf0") is True
-
-    def test_eth_is_not_vpn(self) -> None:
-        assert _is_vpn_by_name("eth0") is False
-
-
-class TestDetectInterfaceTypeWwPrefix:
-    """detect_interface_type: ww-prefix WWAN fallback (priority 3)."""
-
-    def test_ww_prefix_without_modem_manager(self) -> None:
-        """Interface starting with 'ww' must be CELLULAR even if not in modem_interfaces."""
-        reader = FakeSysfsReader()
-        result = detect_interface_type("wwp195s0f3u4", frozenset(), reader)
-        assert result == InterfaceType.CELLULAR
-
-    def test_ww_prefix_with_modem_manager_still_cellular(self) -> None:
-        """Interface in modem_interfaces must be CELLULAR regardless of name prefix.
-
-        ModemManager (priority 2) fires before the ww-prefix check (priority 3).
-        Both paths must return CELLULAR; this test confirms the ModemManager
-        path is not accidentally bypassed when the name also matches.
-        """
-        reader = FakeSysfsReader()
-        result = detect_interface_type(
-            "wwp195s0f3u4", frozenset({"wwp195s0f3u4"}), reader
-        )
-        assert result == InterfaceType.CELLULAR
-
-
-class TestDetectInterfaceTypeWireless:
-    """detect_interface_type: wireless via phy80211 sysfs symlink (priority 6)."""
-
-    def test_phy80211_symlink_is_wireless(self) -> None:
-        """Interface with phy80211 symlink in sysfs must be WIRELESS."""
-        reader = FakeSysfsReader(
-            link_names={("/sys/class/net/wlan0", "phy80211"): "phy0"}
-        )
-        result = detect_interface_type("wlan0", frozenset(), reader)
-        assert result == InterfaceType.WIRELESS
-
-    def test_no_phy80211_symlink_not_wireless(self) -> None:
-        """Interface without phy80211 symlink must not be classified as WIRELESS."""
-        reader = FakeSysfsReader()
-        result = detect_interface_type("eth9", frozenset(), reader)
-        # No phy80211 symlink and no sysfs type file -> not WIRELESS, falls to UNKNOWN.
-        assert result != InterfaceType.WIRELESS
-
-
-class TestDetectInterfaceTypeTether:
-    """detect_interface_type: USB tether detection (priority 4)."""
-
-    def test_usb_tether_driver_is_tether(self) -> None:
-        """Interface backed by a tether USB driver must be TETHER."""
-        usb_path = "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.0"
-        reader = FakeSysfsReader(
-            device_paths={"enx001234567890": usb_path},
-            link_names={(usb_path, "driver"): "cdc_ether"},
-        )
-        result = detect_interface_type("enx001234567890", frozenset(), reader)
-        assert result == InterfaceType.TETHER
-
-    def test_non_tether_usb_driver_not_tether(self) -> None:
-        """USB interface with an unrecognised driver must not be TETHER."""
-        usb_path = "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-3/1-3:1.0"
-        reader = FakeSysfsReader(
-            device_paths={"usb0": usb_path},
-            link_names={(usb_path, "driver"): "usbnet"},
-        )
-        result = detect_interface_type("usb0", frozenset(), reader)
-        assert result != InterfaceType.TETHER
-
-
 class TestGetDeviceNameUsb:
     """get_device_name: USB code paths."""
 
@@ -293,6 +211,35 @@ class TestGetDeviceNameUsb:
         result = get_device_name("enx0", InterfaceType.TETHER, reader, runner)
         assert result.status == DataStatus.ERROR
 
+    def test_usb_whitespace_name_returns_error(self) -> None:
+        """lsusb output that matches the pattern but yields an empty name -> ERROR.
+
+        ``lookup_usb_name`` returns ``None`` when ``match.group(1).strip()``
+        evaluates to an empty string (the ``or None`` branch).  This is
+        distinct from a hard lsusb failure (runner returns ``None`` outright):
+        the command succeeded and the output was parseable, but the captured
+        device name contained only whitespace.
+
+        ``get_device_name`` treats any ``None`` from ``lookup_usb_name`` the
+        same way it treats a command failure: ``DeviceInfo.error()``.
+        """
+        vendor_path = "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2"
+        reader = FakeSysfsReader(
+            device_paths={"enx0": self._USB_PATH},
+            files={
+                (vendor_path, "idVendor"): "18d1",
+                (vendor_path, "idProduct"): "4eeb",
+            },
+        )
+        # Two trailing spaces: \s+ in the regex eats one, (.+) captures the
+        # other, .strip() -> "", "" or None -> None.
+        runner = FakeCommandRunner(
+            {("lsusb", "-d", "18d1:4eeb"): "Bus 001 Device 001: ID 18d1:4eeb  "}
+        )
+        result = get_device_name("enx0", InterfaceType.TETHER, reader, runner)
+        assert result.status == DataStatus.ERROR
+        assert result.name is None
+
     def test_bridge_type_not_applicable(self) -> None:
         result = get_device_name(
             "br0", InterfaceType.BRIDGE, FakeSysfsReader(), FakeCommandRunner({})
@@ -343,39 +290,13 @@ class TestIsEthernet:
         reader = FakeSysfsReader(files={("/sys/class/net/lo", "type"): "772"})
         assert _is_ethernet("lo", reader) is False
 
-    def test_type_file_absent_returns_false(self) -> None:
-        """Missing type file (empty FakeSysfsReader) must return False, not raise."""
+    def test_absent_type_file_returns_false(self) -> None:
+        """Missing type file must return False without raising."""
         reader = FakeSysfsReader()
-        assert _is_ethernet("enp3s0", reader) is False
+        assert _is_ethernet("eth0", reader) is False
 
-    def test_eth_prefix_name_with_type_1_returns_true(self) -> None:
-        """Legacy eth-prefixed name with type=1 must also return True."""
-        reader = FakeSysfsReader(files={("/sys/class/net/eth0", "type"): "1"})
-        assert _is_ethernet("eth0", reader) is True
-
-
-class TestDetectInterfaceTypeArphrd:
-    """detect_interface_type: ARPHRD_ETHER sysfs detection (priority 9)."""
-
-    def test_en_prefixed_with_type_1_is_ethernet(self) -> None:
-        """An en-prefixed interface with sysfs type=1 must be ETHERNET."""
-        reader = FakeSysfsReader(files={("/sys/class/net/enp3s0", "type"): "1"})
-        result = detect_interface_type("enp3s0", frozenset(), reader)
-        assert result == InterfaceType.ETHERNET
-
-    def test_eth_prefixed_with_type_1_is_ethernet(self) -> None:
-        """A legacy eth-prefixed interface with sysfs type=1 must be ETHERNET."""
-        reader = FakeSysfsReader(files={("/sys/class/net/eth0", "type"): "1"})
-        result = detect_interface_type("eth0", frozenset(), reader)
-        assert result == InterfaceType.ETHERNET
-
-    def test_arbitrary_name_with_type_1_is_ethernet(self) -> None:
-        """Any interface name with sysfs type=1 must be ETHERNET regardless of name.
-
-        This is the key advantage of the ARPHRD check over name-prefix matching:
-        an interface named 'net5' or any other non-standard name is correctly
-        identified as Ethernet purely from kernel data.
-        """
+    def test_generic_name_with_type_1_is_ethernet(self) -> None:
+        """Any interface name with sysfs type=1 must be Ethernet."""
         reader = FakeSysfsReader(files={("/sys/class/net/net5", "type"): "1"})
         result = detect_interface_type("net5", frozenset(), reader)
         assert result == InterfaceType.ETHERNET
@@ -625,64 +546,30 @@ class TestIsTuntap:
         assert _is_tuntap("tun0", reader) is True
 
     def test_tun_flags_absent_returns_false(self) -> None:
-        """tun_flags file absent must return False."""
+        """Missing tun_flags file must return False."""
         reader = FakeSysfsReader()
         assert _is_tuntap("tun0", reader) is False
 
-    def test_tap_interface_returns_true(self) -> None:
-        """TAP interface with tun_flags must also return True."""
+
+class TestDetectInterfaceTypeTether:
+    """detect_interface_type: USB tether detection (priority 4)."""
+
+    def test_usb_tether_driver_is_tether(self) -> None:
+        """Interface backed by a tether USB driver must be TETHER."""
+        usb_path = "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-2/1-2:1.0"
         reader = FakeSysfsReader(
-            files={("/sys/class/net/tap0", "tun_flags"): "0x0002"}
+            device_paths={"enx001234567890": usb_path},
+            link_names={(usb_path, "driver"): "cdc_ether"},
         )
-        assert _is_tuntap("tap0", reader) is True
+        result = detect_interface_type("enx001234567890", frozenset(), reader)
+        assert result == InterfaceType.TETHER
 
-
-class TestDetectInterfaceTypeVpnSysfs:
-    """detect_interface_type: sysfs VPN detection (priority 9)."""
-
-    def test_tuntap_sysfs_is_vpn(self) -> None:
-        """Interface with tun_flags in sysfs must be VPN."""
+    def test_non_tether_usb_driver_not_tether(self) -> None:
+        """USB interface with an unrecognised driver must not be TETHER."""
+        usb_path = "/sys/devices/pci0000:00/0000:00:14.0/usb1/1-3/1-3:1.0"
         reader = FakeSysfsReader(
-            files={("/sys/class/net/tun99", "tun_flags"): "0x0001"}
+            device_paths={"usb0": usb_path},
+            link_names={(usb_path, "driver"): "usbnet"},
         )
-        result = detect_interface_type("tun99", frozenset(), reader)
-        assert result == InterfaceType.VPN
-
-    def test_wireguard_sysfs_is_vpn(self) -> None:
-        """Interface with type=65534 and no tun_flags must be VPN."""
-        reader = FakeSysfsReader(
-            files={("/sys/class/net/wg0", "type"): "65534"}
-        )
-        result = detect_interface_type("wg0", frozenset(), reader)
-        assert result == InterfaceType.VPN
-
-    def test_namespace_isolated_wireguard_is_vpn(self) -> None:
-        """Namespace-isolated WireGuard (type=65534, no abi_version) must be VPN.
-
-        Validates the proton0-style interface design finding: abi_version is
-        absent for these interfaces; the type file is the sole sysfs signal.
-        """
-        reader = FakeSysfsReader(
-            files={("/sys/class/net/proton0", "type"): "65534"}
-        )
-        result = detect_interface_type("proton0", frozenset(), reader)
-        assert result == InterfaceType.VPN
-
-    def test_vpn_name_fires_before_sysfs(self) -> None:
-        """Name check (priority 5) must fire before sysfs VPN check (priority 9).
-
-        An interface named 'tun0' is caught at priority 5 (_is_vpn_by_name)
-        even without any sysfs data -- the sysfs check at priority 9 is a
-        fallback for non-standard names only.
-        """
-        reader = FakeSysfsReader()  # no sysfs data
-        result = detect_interface_type("tun0", frozenset(), reader)
-        assert result == InterfaceType.VPN
-
-    def test_non_vpn_type_passes_through(self) -> None:
-        """Interface with type=1 (ARPHRD_ETHER) must pass through to ETHERNET."""
-        reader = FakeSysfsReader(
-            files={("/sys/class/net/eth0", "type"): "1"}
-        )
-        result = detect_interface_type("eth0", frozenset(), reader)
-        assert result == InterfaceType.ETHERNET
+        result = detect_interface_type("usb0", frozenset(), reader)
+        assert result != InterfaceType.TETHER

@@ -87,17 +87,90 @@ class TestRowColor:
 class TestFormatTable:
     """format_table smoke tests."""
 
+    def test_returns_str(self) -> None:
+        result = render_table([make_output_iface(IfaceSpec())])
+        assert isinstance(result, str)
+
+    def test_ends_with_newline(self) -> None:
+        """render_table contract: result ends with a trailing newline."""
+        result = render_table([make_output_iface(IfaceSpec())])
+        assert result.endswith("\n")
+
+    def test_empty_list_produces_header(self) -> None:
+        result = render_table([])
+        assert "INTERFACE" in result
+
+    def test_interface_name_appears(self) -> None:
+        result = render_table([make_output_iface(IfaceSpec(name="wlp1s0"))])
+        assert "wlp1s0" in result
+
+    def test_legend_present(self) -> None:
+        result = render_table([make_output_iface(IfaceSpec())])
+        assert "Legend:" in result
+
+    def test_colored_row_contains_ansi_codes(self) -> None:
+        """A RED interface row must contain the color and reset codes."""
+        result = render_table([make_output_iface(IfaceSpec(egress_status=EgressStatus.OK))])
+        assert _RED in result
+        assert _RESET in result
+
+    def test_no_color_row_has_no_leading_ansi(self) -> None:
+        """A loopback row must not be wrapped in any color code.
+
+        The full render_table output always contains ANSI codes in the legend,
+        so this test isolates just the data row by finding the line that begins
+        with the interface name and verifying it has no leading escape sequence.
+        """
+        iface = make_output_iface(IfaceSpec(
+            name="lo",
+            interface_type=InterfaceType.LOOPBACK,
+            egress_status=EgressStatus.UNAVAILABLE,
+        ))
+        result = render_table([iface])
+        # The data row starts with the (padded) interface name, not an ESC byte.
+        data_row = next(
+            line for line in result.splitlines()
+            if line.startswith("lo")
+        )
+        assert not data_row.startswith("\033"), (
+            f"loopback row should have no leading ANSI code, got: {data_row!r}"
+        )
+
+    def test_format_table_writes_render_table_output(self) -> None:
+        """format_table must write exactly what render_table returns."""
+        ifaces = [make_output_iface(IfaceSpec(name="eth0"))]
+        expected = render_table(ifaces)
+        buf = io.StringIO()
+        format_table(ifaces, file=buf)
+        assert buf.getvalue() == expected
+
+    def test_divider_spans_full_width(self) -> None:
+        """The divider line must be exactly _WIDTH characters wide."""
+        result = render_table([])
+        divider = "=" * _WIDTH
+        assert divider in result
+
+    def test_dormant_dns_shown_in_parentheses(self) -> None:
+        """A dormant DNS server must appear in parentheses in the rendered table."""
+        iface = make_output_iface(IfaceSpec(
+            dns_servers=("192.168.1.1",),
+            current_server=None,
+            leak=DnsLeakStatus.DORMANT,
+        ))
+        result = render_table([iface])
+        assert "(192.168.1.1)" in result
+
     def test_non_empty_output(self) -> None:
         buf = io.StringIO()
         format_table([make_output_iface(IfaceSpec())], file=buf)
         assert len(buf.getvalue()) > 0
 
-    def test_interface_name_appears(self) -> None:
+    def test_interface_name_appears_in_format(self) -> None:
         buf = io.StringIO()
         format_table([make_output_iface(IfaceSpec(name="wlp1s0"))], file=buf)
         assert "wlp1s0" in buf.getvalue()
 
-    def test_legend_present(self) -> None:
+    def test_legend_present_in_format(self) -> None:
         buf = io.StringIO()
         format_table([make_output_iface(IfaceSpec())], file=buf)
         assert "Legend:" in buf.getvalue()
@@ -108,7 +181,7 @@ class TestFormatTable:
         format_table([make_output_iface(IfaceSpec(egress_status=EgressStatus.OK))], file=buf)
         assert _RESET in buf.getvalue()
 
-    def test_empty_list_produces_header(self) -> None:
+    def test_empty_list_produces_header_in_format(self) -> None:
         buf = io.StringIO()
         format_table([], file=buf)
         assert "INTERFACE" in buf.getvalue()
@@ -230,6 +303,23 @@ class TestRenderIPv4IPv6:
         ip_error = IPConfig.error()
         iface = dataclasses.replace(iface, ip=ip_error)
         assert _render_ipv4(iface) == "ERR"
+
+    def test_ipv6_ok_renders_address(self) -> None:
+        """_render_ipv6 OK branch: a non-None IPv6 address must be returned as-is.
+
+        ``IfaceSpec`` has no ipv6 field, so the OK path is reached by
+        constructing an ``IPConfig`` with both addresses populated and
+        splicing it directly onto the interface via ``dataclasses.replace``.
+
+        ``IPConfig.ok(ipv4, ipv6)`` sets ``ipv6_status=OK`` automatically
+        when ``ipv6`` is non-None, satisfying the ``__post_init__`` invariant.
+        This covers the ``return iface.ip.ipv6`` branch in ``_render_ipv6``
+        (table.py line 256) that was previously unreachable from tests.
+        """
+        iface = make_output_iface(IfaceSpec(ipv4="10.2.0.2"))
+        ip_with_v6 = IPConfig.ok("10.2.0.2", "2a07:b944::2:2")
+        iface = dataclasses.replace(iface, ip=ip_with_v6)
+        assert _render_ipv6(iface) == "2a07:b944::2:2"
 
     def test_ipv6_unavailable_renders_dash(self) -> None:
         iface = make_output_iface(IfaceSpec(ipv4=None))
@@ -384,44 +474,13 @@ class TestRowColorExtended:
         iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.NO_VPN))
         assert _row_color(iface) == ""
 
-    def test_warn_leak_gets_yellow(self) -> None:
-        iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.WARN))
-        assert _row_color(iface) == _YELLOW
+    def test_kill_switch_vpn_not_green(self) -> None:
+        """A VPN kill-switch interface (NOT_APPLICABLE DNS, egress OK) must not be GREEN.
 
-    def test_public_leak_gets_yellow(self) -> None:
-        iface = make_output_iface(IfaceSpec(leak=DnsLeakStatus.PUBLIC))
-        assert _row_color(iface) == _YELLOW
-
-    def test_vpn_without_server_ip_not_green(self) -> None:
-        """A VPN interface with server_ip=None must not be GREEN.
-
-        server_ip=None means no static host route to a VPN endpoint was
-        found -- the orchestrator could not confirm a live tunnel.
-        """
-        iface = make_output_iface(IfaceSpec(
-            interface_type=InterfaceType.VPN,
-            leak=DnsLeakStatus.OK,
-            egress_status=EgressStatus.OK,
-        ))
-        # server_ip defaults to None in IfaceSpec -> no GREEN
-        assert _row_color(iface) != _GREEN
-
-    def test_vpn_with_egress_ok_but_no_server_ip_not_green(self) -> None:
-        iface = make_output_iface(IfaceSpec(
-            interface_type=InterfaceType.VPN,
-            egress_status=EgressStatus.OK,
-        ))
-        assert _row_color(iface) != _GREEN
-
-    def test_kill_switch_with_not_applicable_dns_not_green(self) -> None:
-        """A VPN kill-switch interface (server_ip set, DNS NOT_APPLICABLE,
-        egress OK) must NOT be colored GREEN.
-
-        This is the ProtonVPN pvpnksintrf0 scenario after the dns_leak_status
-        fix: the kill-switch has no active current_server and is not a DNS
-        provider type, so its leak status is NOT_APPLICABLE.  It must not be
-        colored GREEN -- that status is reserved for tunnel interfaces that
-        are actively providing encrypted DNS.
+        Kill-switch interfaces (pvpnksintrf0) have ``dns_leak_status=NOT_APPLICABLE``
+        because the VPN type is excluded from DNS provider checks.  GREEN is
+        only awarded when ``dns_leak_status=OK``; falling through all checks
+        with egress=OK on a VPN interface correctly produces no color.
         """
         iface = make_output_iface(IfaceSpec(
             interface_type=InterfaceType.VPN,

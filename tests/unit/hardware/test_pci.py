@@ -109,6 +109,26 @@ class TestLookupPciName:
         runner = FakeCommandRunner({("lspci", "-d", "8086:15bc"): "no colon here"})
         assert lookup_pci_name("8086", "15bc", runner) is None
 
+    def test_whitespace_only_name_returns_none(self) -> None:
+        """Pattern matches but captured name strips to empty -> None.
+
+        The regex ``[^:]+:\\s+(.+)$`` allows whitespace-only text after the
+        class label colon: ``\\s+`` consumes the first space, ``(.+)`` captures
+        any remaining whitespace, and ``.strip()`` produces an empty string.
+        ``"" or None`` then evaluates to ``None``.
+
+        This covers the ``or None`` branch in ``lookup_pci_name`` -- the
+        defensive fallback for malformed lspci output where the device name
+        field is blank.
+        """
+        # One space before end of string: \s+ eats it, (.+) captures nothing
+        # unless there is a second space.  Two trailing spaces: \s+ takes one,
+        # (.+) captures the other, .strip() -> "", or None -> None.
+        runner = FakeCommandRunner(
+            {("lspci", "-d", "8086:15bc"): "00:1f.6 Ethernet controller:  "}
+        )
+        assert lookup_pci_name("8086", "15bc", runner) is None
+
 
 class TestGetPciDeviceName:
     """End-to-end tests for get_pci_device_name."""

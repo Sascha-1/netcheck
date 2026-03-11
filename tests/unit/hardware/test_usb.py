@@ -173,6 +173,25 @@ class TestFindUsbIds:
         )
         assert find_usb_ids(_USB_IFACE_PATH, reader) == ("18d1", "4eeb")
 
+    def test_walk_hits_root_returns_none(self) -> None:
+        """The walk must stop (break) when parent_path returns None at sysfs root.
+
+        ``FakeSysfsReader.parent_path`` delegates to ``os.path.dirname``,
+        which returns the same path for ``"/"`` -- the signal for root.  A
+        shallow starting path reaches root within the ``_MAX_SYSFS_WALK_DEPTH``
+        budget, so ``parent is None`` is hit and ``break`` fires before the
+        loop exhausts its iterations.
+
+        This covers the ``break`` branch inside ``find_usb_ids`` (the path
+        complementary to ``test_returns_none_when_no_ids_found``, which
+        exhausts all iterations on a deep path without hitting root).
+        """
+        # "/usb/dev" is only two levels deep.
+        # Walk: /usb/dev -> /usb -> / -> parent("/") == None -> break.
+        shallow_path = "/usb/dev"
+        reader = FakeSysfsReader()  # no ID files anywhere
+        assert find_usb_ids(shallow_path, reader) is None
+
 
 class TestLookupUsbName:
     """Tests for lookup_usb_name."""
@@ -200,6 +219,24 @@ class TestLookupUsbName:
     def test_unparseable_output_returns_none(self) -> None:
         """lsusb output without the expected format must return None."""
         runner = FakeCommandRunner({("lsusb", "-d", "18d1:4eeb"): "garbled output"})
+        assert lookup_usb_name("18d1", "4eeb", runner) is None
+
+    def test_whitespace_only_name_returns_none(self) -> None:
+        """Pattern matches but captured name strips to empty -> None.
+
+        The regex ``(.+)$`` requires at least one character after the USB ID,
+        so a line with only whitespace after the ID still matches (capturing
+        the whitespace).  ``match.group(1).strip()`` then yields an empty
+        string, and ``"" or None`` evaluates to ``None``.
+
+        This covers the ``or None`` branch in ``lookup_usb_name`` that is
+        unreachable via normal lsusb output but must be handled defensively.
+        """
+        # One trailing space after the ID: \s+ consumes first space,
+        # (.+) captures the remaining space, strip() -> "", or None -> None.
+        runner = FakeCommandRunner(
+            {("lsusb", "-d", "18d1:4eeb"): "Bus 001 Device 001: ID 18d1:4eeb  "}
+        )
         assert lookup_usb_name("18d1", "4eeb", runner) is None
 
 
@@ -243,6 +280,25 @@ class TestGetUsbDeviceName:
             },
         )
         runner = FakeCommandRunner({("lsusb", "-d", "18d1:4eeb"): None})
+        assert get_usb_device_name(_IFACE, reader, runner) is None
+
+    def test_whitespace_only_name_returns_none(self) -> None:
+        """lsusb output that parses to an empty name must return None.
+
+        Exercises the ``lookup_usb_name`` ``or None`` branch end-to-end
+        through ``get_usb_device_name`` so that the call site in the
+        pipeline is also covered.
+        """
+        reader = FakeSysfsReader(
+            device_paths={_IFACE: _USB_IFACE_PATH},
+            files={
+                (_USB_IFACE_PATH, "idVendor"): "18d1",
+                (_USB_IFACE_PATH, "idProduct"): "4eeb",
+            },
+        )
+        runner = FakeCommandRunner(
+            {("lsusb", "-d", "18d1:4eeb"): "Bus 001 Device 001: ID 18d1:4eeb  "}
+        )
         assert get_usb_device_name(_IFACE, reader, runner) is None
 
 
