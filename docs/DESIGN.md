@@ -121,9 +121,19 @@ This principle applies pervasively:
 - An unknown DNS server is `WARN`, not silently `OK`.
 - A DNS-provider interface with no active server during VPN activity is
   `DORMANT` -- a positive security signal, not a failure.
-- An interface that cannot provide DNS in its current state (no SIM, failed
-  modem) is `NOT_APPLICABLE`, not `DORMANT`, because `DORMANT` implies prior
-  DNS activity that never occurred.
+- An interface that is structurally or operationally excluded from DNS leak
+  detection is `NOT_APPLICABLE`, not `DORMANT`.  Two conditions produce this:
+  the interface type is not a DNS provider (loopback, VPN, bridge, virtual,
+  unknown -- these never act as DNS providers and cannot step aside for a VPN);
+  or the interface is a DNS-provider type but has no DNS activity in its
+  current state (no SIM, failed modem) -- `DORMANT` would imply prior DNS
+  activity that never occurred.
+- When no VPN interface is active system-wide, DNS leak detection has nothing
+  to compare against.  Every interface that would otherwise be classified
+  receives `NO_VPN`, not `NOT_APPLICABLE`.  The two are distinct:
+  `NOT_APPLICABLE` is a statement about this interface's participation in DNS
+  routing and can be assigned regardless of VPN state; `NO_VPN` is a
+  system-level statement that the VPN precondition is not met at all.
 - An empty string from `CommandRunner.run()` is `UNAVAILABLE`, not `ERROR`,
   because the command succeeded -- it found nothing, which is a normal
   operational outcome.
