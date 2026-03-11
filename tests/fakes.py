@@ -29,11 +29,17 @@ class FakeCommandRunner:  # pylint: disable=too-few-public-methods
     Args:
         responses: Mapping of command tuples to return values.  A ``None``
                    value simulates a failed or absent command.
-        strict: If ``True``, raise ``KeyError`` for any command not present
-                in ``responses``.  Use in tests where an unexpected command
-                call indicates a misconfigured fixture rather than a genuine
-                absent-command result.  Defaults to ``False`` so all existing
-                tests are unaffected.
+        strict: If ``True`` (the default), raise ``KeyError`` for any command
+                not present in ``responses``.  This makes under-specified test
+                fixtures immediately visible: a refactor that adds a new
+                system call will fail loudly rather than silently receiving
+                ``None`` for the unregistered command.
+
+                Pass ``strict=False`` only when the test intentionally
+                exercises non-strict behaviour, or when the production code
+                under test is expected to call a command that is not in the
+                response map (e.g. testing the ``calls`` list without caring
+                about return values).
 
     Example::
 
@@ -52,7 +58,7 @@ class FakeCommandRunner:  # pylint: disable=too-few-public-methods
     def __init__(
         self,
         responses: dict[tuple[str, ...], str | None],
-        strict: bool = False,
+        strict: bool = True,
     ) -> None:
         self._responses = responses
         self._strict = strict
@@ -62,10 +68,10 @@ class FakeCommandRunner:  # pylint: disable=too-few-public-methods
         """Return the pre-configured response for ``cmd``.
 
         Records the call in ``self.calls`` regardless of whether a response
-        is configured.  In strict mode, raises ``KeyError`` for any command
-        not in the response mapping, making misconfigured tests immediately
-        visible.  In non-strict mode (default), returns ``None`` for
-        unregistered commands, matching the behaviour of
+        is configured.  In strict mode (the default), raises ``KeyError`` for
+        any command not in the response mapping, making misconfigured test
+        fixtures immediately visible.  In non-strict mode, returns ``None``
+        for unregistered commands, matching the behaviour of
         ``SystemCommandRunner`` when a command fails.
 
         Args:
@@ -104,23 +110,9 @@ class FakeSysfsReader:
             If a key is absent, ``read_file`` returns ``None``.
         link_names: Mapping of ``(path, link_name)`` -> resolved link name.
             If a key is absent, ``read_link_name`` returns ``None``.
-        dirs: Set of absolute path strings that should be treated as existing
-            directories.  If a path is absent, ``dir_exists`` returns
-            ``False``.
-
-    Example::
-
-        reader = FakeSysfsReader(
-            device_paths={"eth0": "/sys/devices/pci0000:00/0000:00:1f.6"},
-            files={("/sys/devices/pci0000:00/0000:00:1f.6", "vendor"): "8086"},
-            link_names={("/sys/devices/usb1/1-2", "driver"): "cdc_ether"},
-            dirs=frozenset({"/sys/class/net/br0/bridge"}),
-        )
-        assert reader.device_path("eth0") == "/sys/devices/pci0000:00/0000:00:1f.6"
-        assert reader.read_file("/sys/devices/pci0000:00/0000:00:1f.6", "vendor") == "8086"
-        assert reader.device_path("wlan0") is None
-        assert reader.dir_exists("/sys/class/net/br0/bridge") is True
-        assert reader.dir_exists("/sys/class/net/eth0/bridge") is False
+        dirs: Collection of absolute path strings that should be treated as
+            existing directories.  Accepts either a ``set`` or a ``frozenset``.
+            If a path is absent, ``dir_exists`` returns ``False``.
     """
 
     def __init__(
@@ -128,27 +120,27 @@ class FakeSysfsReader:
         device_paths: dict[str, str] | None = None,
         files: dict[tuple[str, str], str] | None = None,
         link_names: dict[tuple[str, str], str] | None = None,
-        dirs: frozenset[str] = frozenset(),
+        dirs: frozenset[str] | set[str] | None = None,
     ) -> None:
         self._device_paths: dict[str, str] = device_paths or {}
         self._files: dict[tuple[str, str], str] = files or {}
         self._link_names: dict[tuple[str, str], str] = link_names or {}
-        self._dirs: frozenset[str] = dirs
+        self._dirs: frozenset[str] | set[str] = dirs or frozenset()
 
     def device_path(self, iface: str) -> str | None:
-        """Return the pre-configured device path for ``iface``, or ``None``."""
+        """Return the resolved sysfs device path for ``iface``, or ``None``."""
         return self._device_paths.get(iface)
 
     def read_file(self, path: str, filename: str) -> str | None:
-        """Return the pre-configured file content for ``(path, filename)``, or ``None``."""
+        """Return the configured content for ``(path, filename)``, or ``None``."""
         return self._files.get((path, filename))
 
     def read_link_name(self, path: str, link_name: str) -> str | None:
-        """Return the pre-configured link name for ``(path, link_name)``, or ``None``."""
+        """Return the configured link target name, or ``None``."""
         return self._link_names.get((path, link_name))
 
     def parent_path(self, path: str) -> str | None:
-        """Return the parent directory of ``path``, or ``None`` at root.
+        """Return the parent of ``path``, or ``None`` at root.
 
         Implemented via ``os.path.dirname`` -- pure string computation,
         not a sysfs operation, so no faking is required.
@@ -238,7 +230,7 @@ class FakeHttpClient:  # pylint: disable=too-few-public-methods
             timeout: Timeout value (recorded but not used by the fake).
 
         Returns:
-            Pre-configured ``FakeHttpResponse``, or ``None`` if not configured.
+            The pre-configured ``FakeHttpResponse``, or ``None``.
         """
         self.calls.append((url, timeout))
         return self._responses.get(url)
