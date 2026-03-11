@@ -108,7 +108,7 @@ def clean_device(device: str | None) -> str:
     text = re.sub(r"\b(\w+)\s+\1\b", r"\1", text, flags=re.IGNORECASE)
 
     text = " ".join(text.split()).strip(" ,.:-")
-    return text if text else (device or "--")
+    return text if text else "--"
 
 
 def clean_isp(isp: str | None) -> str:
