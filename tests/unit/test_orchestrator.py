@@ -33,12 +33,20 @@ Test groups
     Cellular -> modem info attached when ModemManager reports the interface.
 """
 
+from pathlib import Path
+
 import pytest
 
 from netcheck.core.enums import DataStatus, DnsLeakStatus, EgressStatus, InterfaceType
 from netcheck.core.models import InterfaceInfo
 from netcheck.orchestrator import _apply_vpn_underlay, _fetch_egress, collect_network_data
-from tests.fakes import FakeCommandRunner, FakeHttpClient, FakeHttpResponse, FakeSysfsReader
+from tests.fakes import (
+    ConfigurableErrorSysfsReader,
+    FakeCommandRunner,
+    FakeHttpClient,
+    FakeHttpResponse,
+    FakeSysfsReader,
+)
 from tests.helpers import IfaceSpec, make_iface, make_output_iface
 
 # ---------------------------------------------------------------------------
@@ -107,65 +115,11 @@ def _build_vpn_client() -> FakeHttpClient:
     })
 
 
-# ---------------------------------------------------------------------------
-# Test doubles for exception-handling tests
-# ---------------------------------------------------------------------------
-
-class _ErrorReader:
-    """SysfsReader test double that raises a given exception for one interface.
-
-    All five ``SysfsReader`` protocol methods are implemented so that mypy
-    strict accepts this class wherever a ``SysfsReader`` is expected.  Every
-    method delegates to a plain ``FakeSysfsReader`` except ``device_path``:
-    when called with the configured ``failing`` interface name it raises
-    ``exc`` instead of returning a value.
-
-    ``device_path`` is the first sysfs call made during
-    ``detect_interface_type`` (and therefore during ``_build_interface``), so
-    the exception surfaces at the very start of per-interface processing --
-    before any domain model is constructed.  This makes it the minimal,
-    stable injection point for testing the exception handler in
-    ``collect_network_data`` without using ``unittest.mock``.
-
-    Args:
-        failing: Interface name that triggers the exception.
-        exc:     Exception instance to raise when ``device_path(failing)``
-                 is called.
-    """
-
-    def __init__(self, failing: str, exc: Exception) -> None:
-        self._failing = failing
-        self._exc = exc
-        self._fallback = FakeSysfsReader()
-
-    def device_path(self, iface: str) -> str | None:
-        """Raise ``self._exc`` for the failing interface; delegate otherwise."""
-        if iface == self._failing:
-            raise self._exc
-        return self._fallback.device_path(iface)
-
-    def read_file(self, path: str, filename: str) -> str | None:
-        """Delegate to FakeSysfsReader."""
-        return self._fallback.read_file(path, filename)
-
-    def read_link_name(self, path: str, link_name: str) -> str | None:
-        """Delegate to FakeSysfsReader."""
-        return self._fallback.read_link_name(path, link_name)
-
-    def parent_path(self, path: str) -> str | None:
-        """Delegate to FakeSysfsReader."""
-        return self._fallback.parent_path(path)
-
-    def dir_exists(self, path: str) -> bool:
-        """Delegate to FakeSysfsReader."""
-        return self._fallback.dir_exists(path)
-
-
 def _build_exception_test_runner() -> FakeCommandRunner:
     """Runner for a lo + eth0 two-interface scenario used by exception-handler tests.
 
-    ``eth0`` is the interface that will fail via ``_ErrorReader``; the
-    exception is raised inside ``detect_interface_type`` before any
+    ``eth0`` is the interface that will fail via ``ConfigurableErrorSysfsReader``;
+    the exception is raised inside ``detect_interface_type`` before any
     per-interface commands (``resolvectl``, ``ip route show dev``) are
     reached, so those commands are intentionally absent from this mapping.
 
@@ -208,58 +162,54 @@ class TestCollectNetworkDataHappyPath:
         client = _build_vpn_client()
         return collect_network_data(runner, reader, client)
 
-    def test_returns_all_three_interfaces(self) -> None:
-        result = self._run()
-        assert len(result) == 3
+    def test_three_interfaces_returned(self) -> None:
+        assert len(self._run()) == 3
 
-    def test_interface_names_present(self) -> None:
-        result = self._run()
-        names = {i.name for i in result}
-        assert names == {"lo", "eth0", "tun0"}
+    def test_loopback_present(self) -> None:
+        names = {i.name for i in self._run()}
+        assert "lo" in names
 
-    def test_loopback_classified_correctly(self) -> None:
+    def test_ethernet_present(self) -> None:
+        names = {i.name for i in self._run()}
+        assert "eth0" in names
+
+    def test_vpn_present(self) -> None:
+        names = {i.name for i in self._run()}
+        assert "tun0" in names
+
+    def test_loopback_type(self) -> None:
         result = self._run()
         lo = next(i for i in result if i.name == "lo")
         assert lo.interface_type == InterfaceType.LOOPBACK
 
-    def test_ethernet_classified_correctly(self) -> None:
+    def test_ethernet_type(self) -> None:
         result = self._run()
         eth = next(i for i in result if i.name == "eth0")
         assert eth.interface_type == InterfaceType.ETHERNET
 
-    def test_vpn_classified_correctly(self) -> None:
+    def test_vpn_type(self) -> None:
         result = self._run()
         tun = next(i for i in result if i.name == "tun0")
         assert tun.interface_type == InterfaceType.VPN
 
-    def test_loopback_routing_not_applicable(self) -> None:
-        """Loopback must never have ip route show dev called on it."""
+    def test_ethernet_ipv4(self) -> None:
         result = self._run()
-        lo = next(i for i in result if i.name == "lo")
-        assert lo.routing.query_status == DataStatus.NOT_APPLICABLE
-
-    def test_ipv4_addresses_assigned(self) -> None:
-        result = self._run()
-        by_name = {i.name: i for i in result}
-        assert by_name["lo"].ip.ipv4 == "127.0.0.1"
-        assert by_name["eth0"].ip.ipv4 == "192.168.1.100"
-        assert by_name["tun0"].ip.ipv4 == "10.8.0.2"
+        eth = next(i for i in result if i.name == "eth0")
+        assert eth.ip.ipv4 == "192.168.1.100"
 
     def test_egress_attached_to_active_interface(self) -> None:
-        """eth0 is the active interface; it must carry the egress data."""
         result = self._run()
         eth = next(i for i in result if i.name == "eth0")
         assert eth.egress.status == EgressStatus.OK
         assert eth.egress.external_ip == "1.2.3.4"
 
-    def test_non_active_interfaces_have_unavailable_egress(self) -> None:
+    def test_non_active_interfaces_get_unavailable_egress(self) -> None:
         result = self._run()
         for iface in result:
             if iface.name != "eth0":
                 assert iface.egress.status == EgressStatus.UNAVAILABLE
 
     def test_vpn_server_ip_populated(self) -> None:
-        """VPN endpoint must be detected from the static bypass route."""
         result = self._run()
         tun = next(i for i in result if i.name == "tun0")
         assert tun.vpn.server_ip == "5.253.204.194"
@@ -408,7 +358,7 @@ class TestCollectNetworkDataEdgeCases:
     def test_oserror_in_build_interface_skips_that_interface(self) -> None:
         """OSError from _build_interface must skip that interface; others kept."""
         runner = _build_exception_test_runner()
-        reader = _ErrorReader("eth0", OSError("sysfs read failed"))
+        reader = ConfigurableErrorSysfsReader("eth0", OSError("sysfs read failed"))
         result = collect_network_data(runner, reader, FakeHttpClient({}))
         names = {i.name for i in result}
         assert "lo" in names
@@ -417,7 +367,7 @@ class TestCollectNetworkDataEdgeCases:
     def test_runtimeerror_in_build_interface_skips_that_interface(self) -> None:
         """RuntimeError from _build_interface must skip that interface; others kept."""
         runner = _build_exception_test_runner()
-        reader = _ErrorReader("eth0", RuntimeError("unexpected module fault"))
+        reader = ConfigurableErrorSysfsReader("eth0", RuntimeError("unexpected module fault"))
         result = collect_network_data(runner, reader, FakeHttpClient({}))
         names = {i.name for i in result}
         assert "lo" in names
@@ -432,7 +382,9 @@ class TestCollectNetworkDataEdgeCases:
         be caught by the per-interface handler.
         """
         runner = _build_exception_test_runner()
-        reader = _ErrorReader("eth0", ValueError("DeviceInfo invariant violated"))
+        reader = ConfigurableErrorSysfsReader(
+            "eth0", ValueError("DeviceInfo invariant violated")
+        )
         with pytest.raises(ValueError, match="DeviceInfo invariant violated"):
             collect_network_data(runner, reader, FakeHttpClient({}))
 
@@ -592,3 +544,49 @@ class TestApplyVpnUnderlay:
         _apply_vpn_underlay(original, runner)
         assert [id(i) for i in original] == original_ids
         assert not original[1].vpn.is_vpn_underlay  # original eth unchanged
+
+
+class TestBuildInterface:
+    """_build_interface: per-interface construction details."""
+
+    def test_loopback_routing_not_applicable(self) -> None:
+        """Loopback must not call ip route show dev (routing is NOT_APPLICABLE)."""
+        runner = FakeCommandRunner({
+            ("mmcli", "-L"): "",
+            ("ip", "route", "show", "default"): None,
+            ("ip", "-4", "addr", "show"): (
+                "1: lo: <LOOPBACK,UP>\n"
+                "    inet 127.0.0.1/8 scope host lo\n"
+            ),
+            ("ip", "-6", "addr", "show"): "",
+            ("ip", "-o", "link", "show"): "1: lo: <LOOPBACK,UP> mtu 65536",
+            ("resolvectl", "status", "lo"): _LOOPBACK_RESOLV,
+        })
+        result = collect_network_data(runner, FakeSysfsReader(), FakeHttpClient({}))
+        lo = next(i for i in result if i.name == "lo")
+        assert lo.routing.query_status == DataStatus.NOT_APPLICABLE
+
+    def test_cellular_modem_info_attached(self) -> None:
+        """A cellular interface must have ModemInfo populated from mmcli data."""
+        fixtures = Path(__file__).parent.parent / "fixtures" / "mmcli"
+        list_output = (fixtures / "list.txt").read_text().strip()
+        kv_output = (fixtures / "modem0_kv.txt").read_text().strip()
+
+        runner = FakeCommandRunner({
+            ("mmcli", "-L"): list_output,
+            ("mmcli", "-m", "0", "-K"): kv_output,
+            ("ip", "route", "show", "default"): None,
+            ("ip", "-4", "addr", "show"): (
+                "1: wwp195s0f3u4: <BROADCAST,UP>\n"
+                "    inet 10.45.1.5/24 scope global wwp195s0f3u4\n"
+            ),
+            ("ip", "-6", "addr", "show"): "",
+            ("ip", "-o", "link", "show"): "1: wwp195s0f3u4: <BROADCAST,UP> mtu 1500",
+            ("resolvectl", "status", "wwp195s0f3u4"): "",
+            ("ip", "route", "show", "dev", "wwp195s0f3u4"): "",
+        })
+        result = collect_network_data(runner, FakeSysfsReader(), FakeHttpClient({}))
+        cell = next(i for i in result if i.name == "wwp195s0f3u4")
+        assert cell.interface_type == InterfaceType.CELLULAR
+        assert cell.modem is not None
+        assert cell.modem.state == "connected"

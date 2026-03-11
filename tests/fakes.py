@@ -155,6 +155,62 @@ class FakeSysfsReader:
         return path in self._dirs
 
 
+class ConfigurableErrorSysfsReader:
+    """SysfsReader test double that raises a given exception for one interface.
+
+    All five ``SysfsReader`` protocol methods are implemented so that mypy
+    strict accepts this class wherever a ``SysfsReader`` is expected.  Every
+    method delegates to a plain ``FakeSysfsReader`` except ``device_path``:
+    when called with the configured ``failing`` interface name it raises
+    ``exc`` instead of returning a value.
+
+    ``device_path`` is the first sysfs call made during
+    ``detect_interface_type`` (and therefore during ``_build_interface``), so
+    the exception surfaces at the very start of per-interface processing --
+    before any domain model is constructed.  This makes it the minimal,
+    stable injection point for testing the exception handler in
+    ``collect_network_data`` without using ``unittest.mock``.
+
+    Args:
+        failing: Interface name that triggers the exception.
+        exc:     Exception instance to raise when ``device_path(failing)``
+                 is called.
+
+    Example::
+
+        reader = ConfigurableErrorSysfsReader("eth0", OSError("sysfs read failed"))
+        result = collect_network_data(runner, reader, client)
+        assert "eth0" not in {i.name for i in result}
+    """
+
+    def __init__(self, failing: str, exc: Exception) -> None:
+        self._failing = failing
+        self._exc = exc
+        self._fallback = FakeSysfsReader()
+
+    def device_path(self, iface: str) -> str | None:
+        """Raise ``self._exc`` for the failing interface; delegate otherwise."""
+        if iface == self._failing:
+            raise self._exc
+        return self._fallback.device_path(iface)
+
+    def read_file(self, path: str, filename: str) -> str | None:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.read_file(path, filename)
+
+    def read_link_name(self, path: str, link_name: str) -> str | None:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.read_link_name(path, link_name)
+
+    def parent_path(self, path: str) -> str | None:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.parent_path(path)
+
+    def dir_exists(self, path: str) -> bool:
+        """Delegate to FakeSysfsReader."""
+        return self._fallback.dir_exists(path)
+
+
 # Single public method by design: the fake mirrors the HttpResponse protocol
 # which deliberately exposes only json().
 class FakeHttpResponse:  # pylint: disable=too-few-public-methods
