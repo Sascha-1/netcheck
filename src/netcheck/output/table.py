@@ -226,6 +226,38 @@ def _render_device(device: DeviceInfo) -> str:
     return clean_device(device.name)
 
 
+def _ok_value(value: str | None) -> str:
+    """Narrow a ``str | None`` field to ``str`` after a ``DataStatus.OK`` check.
+
+    ``IPConfig.__post_init__`` enforces the invariant that ``ipv4`` is
+    non-None if and only if ``ipv4_status`` is ``OK``, and likewise for
+    ``ipv6``.  After the ``ERROR`` and ``UNAVAILABLE`` branches have been
+    handled, the only remaining status is ``OK``, which guarantees the value
+    is non-None -- but mypy cannot see through the status-field indirection to
+    verify this.
+
+    This helper makes the narrowing explicit: it replaces a
+    ``# type: ignore[return-value]`` suppression with a documented assertion
+    that will fire at runtime if the dataclass invariant is ever violated,
+    rather than silently suppressing a type error.
+
+    Args:
+        value: A ``str | None`` field that is guaranteed non-None by a
+               ``DataStatus.OK`` invariant at the call site.
+
+    Returns:
+        *value* unchanged, typed as ``str``.
+
+    Raises:
+        AssertionError: If called with ``None``, which indicates a violated
+            ``IPConfig`` post-init invariant.
+    """
+    assert value is not None, (
+        "_ok_value called with None -- DataStatus.OK invariant violated"
+    )
+    return value
+
+
 def _render_ipv4(iface: InterfaceInfo) -> str:
     """Render the internal IPv4 address from ``iface.ip``.
 
@@ -238,7 +270,7 @@ def _render_ipv4(iface: InterfaceInfo) -> str:
     if iface.ip.ipv4_status == DataStatus.UNAVAILABLE:
         return "--"
     # OK: ipv4 is guaranteed non-None by IPConfig.__post_init__
-    return iface.ip.ipv4  # type: ignore[return-value]
+    return _ok_value(iface.ip.ipv4)
 
 
 def _render_ipv6(iface: InterfaceInfo) -> str:
@@ -253,7 +285,7 @@ def _render_ipv6(iface: InterfaceInfo) -> str:
     if iface.ip.ipv6_status == DataStatus.UNAVAILABLE:
         return "--"
     # OK: ipv6 is guaranteed non-None by IPConfig.__post_init__
-    return iface.ip.ipv6  # type: ignore[return-value]
+    return _ok_value(iface.ip.ipv6)
 
 
 def _render_dns_server(dns: DNSConfig) -> str:
