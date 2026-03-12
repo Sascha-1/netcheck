@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Release definition:** a release is a commit that bumps `VERSION` in
+> `src/netcheck/config/__init__.py`, is tagged `vX.Y.Z`, and has its
+> `[Unreleased]` section promoted to a dated `[X.Y.Z]` entry in this file.
+> Pushing commits to GitHub -- including commits that add to `[Unreleased]`
+> -- does not constitute a release.  The version string reported by the
+> running binary reflects whatever `VERSION` was at the last tagged commit,
+> not the state of the working tree.
+
 ---
 
 ## [Unreleased]
