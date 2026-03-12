@@ -33,8 +33,8 @@ The version string, the public DNS server list, the installation logic -- each
 lives in exactly one canonical location and is referenced everywhere else.
 Duplication is treated as a defect, not a convenience.
 
-**One stable environment, done correctly.**  Netcheck targets Debian 12 and
-later.  Wide coverage of every Linux distribution and DNS resolver stack is
+**One stable environment, done correctly.**  Netcheck targets Debian 13
+(Trixie) and later.  Wide coverage of every Linux distribution and DNS resolver stack is
 not a goal.  Supporting `systemd-resolved` well -- with full per-interface
 configured-vs-active distinction -- produces better results than supporting
 every resolver stack approximately.
@@ -196,7 +196,7 @@ begins.
 
 ## 7. Focused scope
 
-netcheck targets Debian 12 and later.  It requires `systemd-resolved`.  It
+netcheck targets Debian 13 (Trixie) and later.  It requires `systemd-resolved`.  It
 does not attempt to support `resolvconf`, `dnsmasq`, or a static
 `/etc/resolv.conf`.
 

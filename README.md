@@ -80,7 +80,7 @@ Table cell values:
 
 ## Requirements
 
-**Python 3.12+** and **systemd-resolved** are required, along with these
+**Python 3.13+** and **systemd-resolved** are required, along with these
 system packages:
 
 ```bash
@@ -96,7 +96,7 @@ make install
 ```
 
 `make install` copies the launcher to `~/.local/bin/netcheck`, which is on
-`PATH` by default in Debian and Linux Mint. On a fresh account where
+`PATH` by default in Debian 13 and Linux Mint LMDE 7. On a fresh account where
 `~/.local/bin` did not previously exist, log out and back in once, or run
 `source ~/.profile`.
 

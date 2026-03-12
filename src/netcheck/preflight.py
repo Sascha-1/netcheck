@@ -21,7 +21,7 @@ data-absent columns.
 Package names and target distribution
 --------------------------------------
 Package names are correct for Debian 13 (Trixie) and its derivatives,
-including Linux Mint 22.3.  These distributions use ``apt`` as their package
+including Linux Mint LMDE 7.  These distributions use ``apt`` as their package
 manager.  The command names are stable across distributions; only the package
 names differ on non-Debian systems.
 

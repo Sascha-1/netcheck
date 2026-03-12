@@ -7,16 +7,14 @@ name = "netcheck"
 dynamic = ["version"]
 description = "Network interface analysis tool for GNU/Linux"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 license = {text = "AGPL-3.0-or-later"}
 # Runtime dependency documented here for reference.
 # Installation is via "make install" which uses a .pth file -- no pip involved.
 # Install the dependency via apt: sudo apt install python3-requests
 #
-# The >=2.32 lower bound matches the Debian/Ubuntu apt package version
-# (python3-requests 2.32.3+dfsg-5 as of Debian 13 / Ubuntu 24.04).
-# 2.32.0 is also the minimum that includes the fix for CVE-2024-35195
-# (proxy credential leakage via session reuse).  No upper bound is set
+# The >=2.32 lower bound matches the apt package version shipped by
+# Debian 13 (python3-requests 2.32.3+dfsg-5).  No upper bound is set
 # because this tool is installed via .pth, not pip, and version resolution
 # is handled entirely by the system package manager.
 dependencies = ["requests>=2.32"]
@@ -31,7 +29,7 @@ version = {attr = "netcheck.config.VERSION"}
 # mypy -- strict type checking
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 strict = true
 warn_unreachable = true
 pretty = true
@@ -43,7 +41,7 @@ files = ["src/netcheck/", "tests/"]
 # ---------------------------------------------------------------------------
 [tool.pylint.main]
 jobs = 0           # use all available CPU cores
-py-version = "3.12"
+py-version = "3.13"
 fail-under = 10.0  # perfect score required
 
 [tool.pylint.design]
