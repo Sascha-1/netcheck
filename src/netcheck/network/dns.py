@@ -50,8 +50,8 @@ classification requires a system-wide view.
 
 ``query_status`` semantics
 --------------------------
-- ``DataStatus.ERROR``       -- ``resolvectl status <iface>`` produced no
-                               output or exited with a non-zero code.
+- ``DataStatus.ERROR``       -- runner returned ``None`` (``resolvectl``
+                               subprocess failed or timed out).
 - ``DataStatus.UNAVAILABLE`` -- command succeeded but reported no DNS servers
                                for this interface.
 - ``DataStatus.OK``          -- at least one DNS server was found.
@@ -99,7 +99,8 @@ def get_interface_dns(iface_name: str, runner: CommandRunner) -> DNSConfig:
 
     ``query_status`` reflects the outcome of the command:
 
-    - ``DataStatus.ERROR``       -- command produced no output.
+    - ``DataStatus.ERROR``       -- runner returned ``None`` (subprocess
+                                   failed or timed out).
     - ``DataStatus.UNAVAILABLE`` -- command succeeded; no DNS servers found.
     - ``DataStatus.OK``          -- at least one DNS server found.
 
@@ -112,8 +113,8 @@ def get_interface_dns(iface_name: str, runner: CommandRunner) -> DNSConfig:
         placeholder ``leak_status`` of ``NOT_APPLICABLE``.
     """
     output = runner.run(["resolvectl", "status", iface_name])
-    if not output:
-        logger.debug("%s: resolvectl returned no output (status=ERROR)", iface_name)
+    if output is None:
+        logger.debug("%s: resolvectl runner returned None (status=ERROR)", iface_name)
         return DNSConfig(
             query_status=DataStatus.ERROR,
             servers=(),

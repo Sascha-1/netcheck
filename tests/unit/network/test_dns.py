@@ -86,10 +86,41 @@ class TestGetInterfaceDns:
         assert not result.servers
 
     def test_command_failure_is_error_status(self) -> None:
+        """Runner returning None (subprocess failed) must yield ERROR.
+
+        ``None`` is the contract signal for a subprocess failure, timeout,
+        or missing executable.  It must be classified ``DataStatus.ERROR``,
+        not ``UNAVAILABLE``.  See ADR-008 Decision section 3.
+        """
         runner = FakeCommandRunner({("resolvectl", "status", "eth0"): None})
         result = get_interface_dns("eth0", runner)
         assert result.query_status == DataStatus.ERROR
         assert not result.servers
+
+    def test_empty_output_is_unavailable_not_error(self) -> None:
+        """Runner returning '' (command succeeded, no output) must yield UNAVAILABLE.
+
+        ``resolvectl status <iface>`` can return an empty string when the
+        interface has no DNS configuration at all.  The command ran
+        successfully and produced no DNS entries -- that is
+        ``DataStatus.UNAVAILABLE``, not a runner failure
+        (``DataStatus.ERROR``).
+
+        ADR-008 Decision section 3: ``if output is None`` is the ERROR
+        gate.  An empty string falls through to the parsing branch, which
+        produces no servers and no current_server; the function then
+        returns ``UNAVAILABLE`` via the ``DataStatus.OK if servers else
+        DataStatus.UNAVAILABLE`` expression.
+
+        This test would have failed before the fix because the old
+        ``if not output:`` guard treated ``""`` and ``None`` identically,
+        returning ``DataStatus.ERROR`` for both.
+        """
+        runner = FakeCommandRunner({("resolvectl", "status", "eth0"): ""})
+        result = get_interface_dns("eth0", runner)
+        assert result.query_status == DataStatus.UNAVAILABLE
+        assert not result.servers
+        assert result.current_server is None
 
     def test_leak_status_placeholder(self) -> None:
         """get_interface_dns sets leak_status to NOT_APPLICABLE (placeholder)."""
