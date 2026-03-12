@@ -188,8 +188,8 @@ class IPConfig:
     def error(cls) -> "IPConfig":
         """Return an ``IPConfig`` when the address query command failed.
 
-        Use when the ``ip addr show`` command produced no output or exited
-        with a non-zero code.
+        Use when the runner returned ``None`` (subprocess failed, timed out,
+        or was not found).
 
         Returns:
             ``IPConfig`` with both status fields ``ERROR`` and both address
@@ -244,11 +244,13 @@ class DNSConfig:
     ``query_status`` records the outcome of the ``resolvectl status <iface>``
     call:
 
-    - ``DataStatus.OK``          -- command succeeded; ``servers`` may be empty
-                                   if the interface has no DNS configured.
+    - ``DataStatus.OK``          -- at least one DNS server was found;
+                                   ``servers`` is non-empty.
     - ``DataStatus.UNAVAILABLE`` -- command succeeded but reported no DNS
-                                   servers for this interface.
-    - ``DataStatus.ERROR``       -- command failed (non-zero exit or no output).
+                                   servers for this interface; ``servers``
+                                   is an empty tuple.
+    - ``DataStatus.ERROR``       -- runner returned ``None`` (subprocess
+                                   failed, timed out, or was not found).
 
     ``servers`` holds every DNS server address reported by
     ``resolvectl status <interface>``.  An empty tuple indicates that
@@ -287,8 +289,8 @@ class RoutingInfo:
     - ``DataStatus.UNAVAILABLE`` -- command succeeded but no default route
                                    exists for this interface.  ``gateway``
                                    and ``metric`` are ``None``.
-    - ``DataStatus.ERROR``       -- command failed or produced no output.
-                                   ``gateway`` and ``metric`` are ``None``.
+    - ``DataStatus.ERROR``       -- runner returned ``None``; ``gateway``
+                                   and ``metric`` are ``None``.
 
     ``metric`` is always the literal integer value present in the routing
     table when a default route exists.  When the ``metric`` keyword is absent
@@ -382,8 +384,8 @@ class VPNInfo:
     def error(cls, *, is_vpn_underlay: bool = False) -> "VPNInfo":
         """Return a ``VPNInfo`` when the route query command failed.
 
-        Use when ``ip route show`` produced no output or exited with a
-        non-zero code.
+        Use when the runner returned ``None`` (subprocess failed or was not
+        found).
 
         Args:
             is_vpn_underlay: Whether this interface carries VPN tunnel traffic.
@@ -504,10 +506,10 @@ class EgressInfo:
         """Return an EgressInfo for an interface that was not queried.
 
         Use this for every interface that is not the active egress path.
-        The display layer renders data fields as ``"--"``.
 
         Returns:
-            EgressInfo with status UNAVAILABLE and all data fields ``None``.
+            ``EgressInfo`` with ``status=UNAVAILABLE`` and all data fields
+            ``None``.
         """
         return cls(
             status=EgressStatus.UNAVAILABLE,
@@ -521,12 +523,12 @@ class EgressInfo:
     def create_failed(cls) -> "EgressInfo":
         """Return an EgressInfo for a failed API query.
 
-        Use this when the API was contacted but returned an error or an
-        unparseable response.  The display layer renders data fields as
-        ``"ERR"``.
+        Use this when the active egress interface was identified but the
+        ipinfo.io API call returned an error or unparseable response.
 
         Returns:
-            EgressInfo with status FAILED and all data fields ``None``.
+            ``EgressInfo`` with ``status=FAILED`` and all data fields
+            ``None``.
         """
         return cls(
             status=EgressStatus.FAILED,
@@ -539,24 +541,16 @@ class EgressInfo:
 
 @dataclass(frozen=True)
 class InterfaceInfo:
-    """Complete information about a single network interface.
+    """Complete network information for one interface.
 
-    This is the top-level domain object produced by the orchestrator for
-    each interface discovered on the system.  Every field is populated at
-    construction time; no post-construction mutation is performed.
+    Groups all sub-domain objects for a single network interface.  Each
+    field group is a frozen dataclass in its own right.
 
-    ``modem`` is ``None`` for all interface types except ``CELLULAR``, and
-    may also be ``None`` for a ``CELLULAR`` interface when ModemManager does
-    not report the modem (e.g. no SIM card inserted).
-
-    Field summary
-    -------------
-    ``name``           -- Kernel interface name (e.g. ``eth0``, ``wlp1s0``).
+    ``name``           -- Interface name string (e.g. ``"eth0"``).
     ``interface_type`` -- Classification from ``InterfaceType``.
-    ``device``         -- Hardware description with collection status.
-    ``ip``             -- IPv4 and IPv6 address configuration.
-    ``dns``            -- DNS servers, current server, query status, and leak
-                         detection result.
+    ``device``         -- Hardware description and lookup status.
+    ``ip``             -- Internal IPv4 and IPv6 addresses.
+    ``dns``            -- DNS server configuration and leak status.
     ``egress``         -- Public IP, ISP, and country.
     ``routing``        -- Default gateway, metric, and query status.
     ``vpn``            -- VPN endpoint and underlay carrier flag.

@@ -17,8 +17,8 @@ Provides:
 - ``DataStatus.UNAVAILABLE`` -- the command succeeded but no default route
                                exists for this interface.  ``gateway`` and
                                ``metric`` are ``None``.
-- ``DataStatus.ERROR``       -- the command failed or produced no output.
-                               ``gateway`` and ``metric`` are ``None``.
+- ``DataStatus.ERROR``       -- the runner returned ``None``; ``gateway``
+                               and ``metric`` are ``None``.
 
 Distinguishing ``UNAVAILABLE`` from ``ERROR`` matters to callers: a missing
 default route is a normal network state (the interface is not on the default
@@ -109,7 +109,7 @@ def get_route_info(iface_name: str, runner: CommandRunner) -> RoutingInfo:
     """
     output = runner.run(["ip", "route", "show", "dev", iface_name])
     if output is None:
-        logger.debug("%s: ip route show returned no output (status=ERROR)", iface_name)
+        logger.debug("%s: ip route show runner returned None (status=ERROR)", iface_name)
         return RoutingInfo(
             query_status=DataStatus.ERROR,
             gateway=None,
