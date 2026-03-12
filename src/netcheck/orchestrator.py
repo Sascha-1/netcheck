@@ -112,7 +112,11 @@ def collect_network_data(
     logger.debug("Active egress interface: %s", active)
 
     # Step 4: External IP (egress interface only)
-    egress = _fetch_egress(active, client)
+    if active is None:
+        egress = EgressInfo.create_unavailable()
+    else:
+        logger.debug("Querying egress info for %s...", active)
+        egress = get_egress_info(client)
 
     # Step 5: Batch IP queries
     logger.debug("Batch-querying IP addresses...")
@@ -178,17 +182,6 @@ class _SharedRunData:
     all_ipv6: tuple[dict[str, str], DataStatus]
     modem_ifaces: frozenset[str]
     modem_records: list[ModemRecord]
-
-
-def _fetch_egress(active: str | None, client: HttpClient) -> EgressInfo:
-    """Query the egress API when an active interface is known.
-
-    Returns ``create_unavailable()`` if there is no active interface.
-    """
-    if active is None:
-        return EgressInfo.create_unavailable()
-    logger.debug("Querying egress info for %s...", active)
-    return get_egress_info(client)
 
 
 def _build_interface(

@@ -19,10 +19,6 @@ Test groups
     RuntimeError from _build_interface -> that interface skipped, others kept.
     ValueError from _build_interface -> propagates (programming error).
 
-``TestFetchEgress``
-    Active interface -> delegates to get_egress_info.
-    None active interface -> returns create_unavailable().
-
 ``TestApplyVpnUnderlay``
     No VPN interfaces -> list returned unchanged.
     VPN interface present but no static host route -> server_ip stays None.
@@ -39,7 +35,7 @@ import pytest
 
 from netcheck.core.enums import DataStatus, DnsLeakStatus, EgressStatus, InterfaceType
 from netcheck.core.models import InterfaceInfo
-from netcheck.orchestrator import _apply_vpn_underlay, _fetch_egress, collect_network_data
+from netcheck.orchestrator import _apply_vpn_underlay, collect_network_data
 from tests.fakes import (
     ConfigurableErrorSysfsReader,
     FakeCommandRunner,
@@ -387,31 +383,6 @@ class TestCollectNetworkDataEdgeCases:
         )
         with pytest.raises(ValueError, match="DeviceInfo invariant violated"):
             collect_network_data(runner, reader, FakeHttpClient({}))
-
-
-class TestFetchEgress:
-    """_fetch_egress: egress query gating."""
-
-    def test_none_active_returns_unavailable(self) -> None:
-        """No active interface must return UNAVAILABLE without querying the API."""
-        client = FakeHttpClient({})
-        egress = _fetch_egress(None, client)
-        assert egress.status == EgressStatus.UNAVAILABLE
-        assert egress.external_ip is None
-
-    def test_none_active_makes_no_api_calls(self) -> None:
-        client = FakeHttpClient({})
-        _fetch_egress(None, client)
-        assert not client.calls
-
-    def test_active_interface_queries_api(self) -> None:
-        client = FakeHttpClient({
-            "https://ipinfo.io/json": _IPINFO_OK,
-            "https://v6.ipinfo.io/json": None,
-        })
-        egress = _fetch_egress("eth0", client)
-        assert egress.status == EgressStatus.OK
-        assert egress.external_ip == "1.2.3.4"
 
 
 class TestApplyVpnUnderlay:
