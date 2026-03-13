@@ -47,7 +47,7 @@ from here rather than embedding literals.
 
 from typing import Final
 
-VERSION: Final[str] = "1.1.0"
+VERSION: Final[str] = "1.2.0"
 
 # Last reviewed: 2026-03-01.  Add new resolvers as major public providers
 # emerge.  Unknown servers are classified WARN rather than PUBLIC, which is

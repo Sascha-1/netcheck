@@ -17,11 +17,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+---
+
+## [1.2.0] - 2026-03-13
+
 ### Added
 
 **DNS leak detection**
 
-- `DnsLeakStatus.NO_VPN` (`"no_vpn"`) — new enum member that replaces
+- `DnsLeakStatus.NO_VPN` (`"no_vpn"`) -- new enum member that replaces
   `NOT_APPLICABLE` in the specific case where no VPN interface is active
   system-wide.  `NOT_APPLICABLE` now means only structural or operational
   exclusion of this interface from leak detection, regardless of VPN state.
@@ -30,7 +34,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   routing.  Downstream consumers that treat unknown values as `not_applicable`
   are unaffected by the addition.
 
-- `DnsLeakStatus.ISOLATED` (`"isolated"`) — new enum member for DNS-provider
+- `DnsLeakStatus.ISOLATED` (`"isolated"`) -- new enum member for DNS-provider
   interfaces that have no DNS servers configured and no current DNS activity
   while a VPN is active on the system.  This covers two observationally
   identical situations: a VPN client that explicitly strips DNS server
@@ -45,6 +49,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   physical interfaces: the interface is not resolving any queries while the
   VPN is running.  Downstream consumers that treat unknown values as
   `not_applicable` are unaffected by the addition.
+
+**Domain model**
+
+- `RoutingInfo.__post_init__` invariant added, matching the existing pattern
+  in `DeviceInfo`, `IPConfig`, and `VPNInfo`.  Two invariants are enforced:
+  (1) `metric is not None` if and only if `query_status` is `OK` -- a metric
+  is meaningless without a route, and a found route always carries one;
+  (2) `gateway is not None` only when `query_status` is `OK` -- the converse
+  is not enforced because a directly-connected route (no `via` keyword) has
+  `query_status=OK` and `gateway=None`.
+
+- `RoutingInfo` factory class-methods added: `not_applicable()`, `error()`,
+  `unavailable()`, and `ok(metric, *, gateway=None)`.  All satisfy the new
+  invariant by construction.
+
+- `RoutingInfo.NOT_APPLICABLE` (`query_status=DataStatus.NOT_APPLICABLE`) now
+  documented in the class docstring.  This status was already produced for
+  loopback interfaces but was absent from the docstring and had no factory
+  method.
 
 ### Changed
 
@@ -74,12 +97,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 **Output**
 
+- Table legend entry for `dns:isolated` added: "VPN active; no DNS servers
+  (stripped by VPN provider)".
 - Table legend entry for `dns:not_applicable` updated from "No VPN active, or
   interface not currently routing DNS" to "Interface excluded from DNS leak
   detection", accurately reflecting the narrowed semantics after the
-  introduction of `no_vpn`.
+  introduction of `no_vpn`.  A continuation line clarifies that VPN
+  kill-switch interfaces fall into this category and that GREEN requires active
+  VPN DNS.
 - Table legend entry for `dns:no_vpn` added: "No VPN active; DNS leak
   detection not applicable".
+- README colour table updated to include `isolated` and to document the
+  kill-switch behaviour under `not_applicable`.
 
 **Documentation**
 
@@ -94,6 +123,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+**Domain model**
+
+- `RoutingInfo` docstring previously omitted `DataStatus.NOT_APPLICABLE` from
+  the `query_status` description despite the orchestrator producing it for
+  loopback interfaces.  The docstring now lists all four statuses.
+
 **DNS leak detection**
 
 - `DNSConfig` docstring for `OK` and `UNAVAILABLE` states corrected.  The
@@ -106,11 +141,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   site and a full docstring explaining both conditions and their shared
   `current_server is None` sub-condition.
 
+- `_compute_leak_status` check order (ISP -> VPN -> public -> warn) now
+  documented with an inline comment explaining why ISP is tested before VPN:
+  an ISP server that also appears in the VPN DNS list represents a genuine
+  leak, and security takes priority over the VPN classification.
+
+**Preflight**
+
+- `preflight.py` docstring incorrectly stated that missing `mmcli` makes
+  cellular interfaces invisible.  Corrected: without `mmcli`, cellular
+  interfaces are still detected and classified by name prefix, but lose
+  hardware device identification and modem state.
+
 **Test coverage**
 
+- `tests/unit/test_enums.py`: `TestDnsLeakStatus` updated for `ISOLATED` --
+  member count 7->8, `ISOLATED` added to `test_string_value` parametrize
+  list, new `test_isolated_is_semantically_distinct_from_dormant_and_not_applicable`
+  using the set-cardinality pattern.
+- `tests/unit/output/test_table.py`: `TestRenderMetric.test_ok_none_metric_renders_zero`
+  removed.  The state it tested (`query_status=OK, metric=None`) is now
+  rejected by `RoutingInfo.__post_init__`; it was never reachable in
+  production because `routing.py` normalises a missing metric keyword to `0`.
+  `test_ok_zero_metric` updated with a docstring explaining this.
 - `tests/unit/test_orchestrator.py`: added test covering the no-carrier branch
-  (lines 132--133) where `_apply_vpn_underlay` sets `vpn_server_ip` on VPN
-  interfaces even when no physical underlay carrier is found.
+  where `_apply_vpn_underlay` sets `vpn_server_ip` on VPN interfaces even when
+  no physical underlay carrier is found.
 - `tests/unit/utils/test_sysfs.py`: added tests for three OS-error paths in
   `SystemSysfsReader` -- `read_file` target-is-directory, `read_link_name`
   permission-denied, and `dir_exists` permission-denied.
