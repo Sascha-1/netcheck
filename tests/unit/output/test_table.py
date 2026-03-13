@@ -395,15 +395,17 @@ class TestRenderMetric:
         assert _render_metric(routing) == "100"
 
     def test_ok_zero_metric(self) -> None:
+        """OK with metric=0 covers the kernel's implicit-zero case.
+
+        ``routing.py`` normalises a missing ``metric`` keyword to ``0``
+        before constructing ``RoutingInfo``, so ``query_status=OK`` with
+        ``metric=None`` is impossible by construction.  The ``__post_init__``
+        invariant enforces this: ``metric`` must be non-None if and only if
+        ``query_status`` is ``OK``.  No separate test for the ``metric=None``
+        branch is needed or valid.
+        """
         routing = RoutingInfo(
             query_status=DataStatus.OK, gateway="192.168.1.1", metric=0
-        )
-        assert _render_metric(routing) == "0"
-
-    def test_ok_none_metric_renders_zero(self) -> None:
-        """OK with metric=None means the kernel implicitly used 0; render '0'."""
-        routing = RoutingInfo(
-            query_status=DataStatus.OK, gateway="192.168.1.1", metric=None
         )
         assert _render_metric(routing) == "0"
 

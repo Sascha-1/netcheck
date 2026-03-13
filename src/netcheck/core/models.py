@@ -281,26 +281,146 @@ class RoutingInfo:
     ``query_status`` records the outcome of the ``ip route show dev <iface>``
     call:
 
-    - ``DataStatus.OK``          -- a default route entry was found.
-                                   ``metric`` is set.  ``gateway`` is the
-                                   ``via`` address when present, or ``None``
-                                   for a directly-connected route (no ``via``
-                                   keyword in the routing table entry).
-    - ``DataStatus.UNAVAILABLE`` -- command succeeded but no default route
-                                   exists for this interface.  ``gateway``
-                                   and ``metric`` are ``None``.
-    - ``DataStatus.ERROR``       -- runner returned ``None``; ``gateway``
-                                   and ``metric`` are ``None``.
+    - ``DataStatus.NOT_APPLICABLE`` -- no routing query was attempted for this
+                                      interface type (e.g. loopback).
+                                      ``gateway`` and ``metric`` are ``None``.
+    - ``DataStatus.OK``             -- a default route entry was found.
+                                      ``metric`` is set.  ``gateway`` is the
+                                      ``via`` address when present, or ``None``
+                                      for a directly-connected route (no ``via``
+                                      keyword in the routing table entry).
+    - ``DataStatus.UNAVAILABLE``    -- command succeeded but no default route
+                                      exists for this interface.  ``gateway``
+                                      and ``metric`` are ``None``.
+    - ``DataStatus.ERROR``          -- runner returned ``None``; ``gateway``
+                                      and ``metric`` are ``None``.
 
     ``metric`` is always the literal integer value present in the routing
     table when a default route exists.  When the ``metric`` keyword is absent
     from the route entry, the kernel implicitly uses ``0``; netcheck reads
     this deterministically rather than substituting a placeholder string.
+
+    Invariants (enforced at construction time by ``__post_init__``):
+
+    1. ``metric is not None`` if and only if ``query_status`` is ``OK``.
+       A metric is meaningless without a route, and a found route always
+       carries a metric (``0`` when the keyword is absent).
+    2. ``gateway is not None`` only when ``query_status`` is ``OK``.
+       The converse does not hold: a directly-connected route (no ``via``
+       keyword) has ``query_status=OK`` and ``gateway=None``.
+
+    These invariants are the same single-source-of-truth contract used by
+    ``DeviceInfo``, ``IPConfig``, and ``VPNInfo``.  The factory class-methods
+    all satisfy them by construction; ``__post_init__`` catches any call site
+    that bypasses the factories.
+
+    Factory methods
+    ---------------
+    ``RoutingInfo.not_applicable()`` -- no routing query attempted.
+    ``RoutingInfo.error()``          -- runner returned ``None``.
+    ``RoutingInfo.unavailable()``    -- query succeeded, no default route.
+    ``RoutingInfo.ok(metric, *, gateway=None)`` -- default route found.
     """
 
     query_status: DataStatus
     gateway: str | None
     metric: int | None
+
+    def __post_init__(self) -> None:
+        """Enforce the gateway/metric invariants at construction time.
+
+        Raises:
+            ValueError: If ``metric`` is non-``None`` when ``query_status``
+                is not ``OK``, or if ``metric`` is ``None`` when
+                ``query_status`` is ``OK``.  Also raised if ``gateway`` is
+                non-``None`` when ``query_status`` is not ``OK``.
+        """
+        if (self.query_status == DataStatus.OK) != (self.metric is not None):
+            raise ValueError(
+                f"RoutingInfo invariant violated: "
+                f"query_status={self.query_status!r} metric={self.metric!r}. "
+                "metric must be non-None if and only if query_status is OK."
+            )
+        if self.query_status != DataStatus.OK and self.gateway is not None:
+            raise ValueError(
+                f"RoutingInfo invariant violated: "
+                f"query_status={self.query_status!r} gateway={self.gateway!r}. "
+                "gateway must be None when query_status is not OK."
+            )
+
+    @classmethod
+    def not_applicable(cls) -> "RoutingInfo":
+        """Return a ``RoutingInfo`` for interface types that are not queried.
+
+        Use for loopback interfaces, where routing table queries are not
+        performed and the concept of a default gateway does not apply.
+
+        Returns:
+            ``RoutingInfo`` with ``query_status=NOT_APPLICABLE``,
+            ``gateway=None``, and ``metric=None``.
+        """
+        return cls(
+            query_status=DataStatus.NOT_APPLICABLE,
+            gateway=None,
+            metric=None,
+        )
+
+    @classmethod
+    def error(cls) -> "RoutingInfo":
+        """Return a ``RoutingInfo`` when the routing query command failed.
+
+        Use when the runner returned ``None`` (subprocess failed, timed out,
+        or was not found).
+
+        Returns:
+            ``RoutingInfo`` with ``query_status=ERROR``, ``gateway=None``,
+            and ``metric=None``.
+        """
+        return cls(
+            query_status=DataStatus.ERROR,
+            gateway=None,
+            metric=None,
+        )
+
+    @classmethod
+    def unavailable(cls) -> "RoutingInfo":
+        """Return a ``RoutingInfo`` when no default route exists.
+
+        Use when ``ip route show dev <iface>`` succeeded but contained no
+        ``default`` entry -- a normal state for an interface not on the
+        default path.
+
+        Returns:
+            ``RoutingInfo`` with ``query_status=UNAVAILABLE``,
+            ``gateway=None``, and ``metric=None``.
+        """
+        return cls(
+            query_status=DataStatus.UNAVAILABLE,
+            gateway=None,
+            metric=None,
+        )
+
+    @classmethod
+    def ok(cls, metric: int, *, gateway: str | None = None) -> "RoutingInfo":
+        """Return a ``RoutingInfo`` when a default route was found.
+
+        Args:
+            metric: Route metric as reported by the kernel.  Pass ``0`` when
+                the ``metric`` keyword is absent from the route entry (the
+                kernel's implicit value).
+            gateway: Next-hop router address (the ``via`` value), or ``None``
+                for a directly-connected route where no ``via`` keyword is
+                present in the routing table entry.
+
+        Returns:
+            ``RoutingInfo`` with ``query_status=OK``, ``metric`` set, and
+            ``gateway`` set or ``None``.
+        """
+        return cls(
+            query_status=DataStatus.OK,
+            gateway=gateway,
+            metric=metric,
+        )
 
 
 @dataclass(frozen=True)
