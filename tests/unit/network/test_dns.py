@@ -285,24 +285,27 @@ class TestDormantClassification:
         tunnel_out = result[0]
         assert tunnel_out.dns.leak_status == DnsLeakStatus.OK
 
-    def test_dns_provider_type_with_no_dns_activity_is_not_applicable(self) -> None:
-        """A DNS-provider-type interface with no DNS activity must be NOT_APPLICABLE.
+    def test_dns_provider_type_with_no_dns_activity_and_vpn_is_isolated(self) -> None:
+        """A DNS-provider-type interface with no DNS activity while VPN is active
+        must be classified ISOLATED, not NOT_APPLICABLE or DORMANT.
 
-        CELLULAR is in _DNS_PROVIDER_TYPES, but a modem with no SIM
-        (dns_query_status=UNAVAILABLE, current_server=None) has never provided
-        DNS and cannot in its current state.  Labelling it DORMANT would
-        misrepresent it as having stepped aside for a VPN, implying prior DNS
-        activity that never occurred.
+        CELLULAR is in _DNS_PROVIDER_TYPES.  A modem with no SIM
+        (dns_query_status=UNAVAILABLE, servers=(), current_server=None) is
+        observationally identical to an ethernet interface whose DNS servers
+        were stripped by the VPN client (e.g. ProtonVPN).  Both have no
+        servers, no current_server, and a VPN active on the system.  The
+        tool cannot distinguish them and classifies both as ISOLATED: the
+        VPN is active and this interface is not contributing any DNS activity.
+
+        This is distinct from DORMANT, which requires non-empty servers
+        (evidence that the interface stepped aside from a configured DNS role).
         """
-        # No servers, no current_server -> query_status=UNAVAILABLE (simulates
-        # a failed modem).  Pass a VPN interface to trigger the DORMANT path
-        # for other interfaces.
         modem = _iface("wwp195s0f3u4", InterfaceType.CELLULAR)  # servers=()
         tunnel = _iface("tun0", InterfaceType.VPN, ("10.8.0.1",),
                         current_server="10.8.0.1")
         result = check_dns_leaks([modem, tunnel])
         modem_out = next(r for r in result if r.name == "wwp195s0f3u4")
-        assert modem_out.dns.leak_status == DnsLeakStatus.NOT_APPLICABLE
+        assert modem_out.dns.leak_status == DnsLeakStatus.ISOLATED
 
     def test_dormant_interfaces_do_not_trigger_leak_detection(self) -> None:
         """A system with all physical interfaces dormant must have no LEAK
@@ -319,6 +322,86 @@ class TestDormantClassification:
         assert statuses["eth0"] == DnsLeakStatus.DORMANT
         assert statuses["tun0"] == DnsLeakStatus.OK
         assert DnsLeakStatus.LEAK not in statuses.values()
+
+
+class TestIsolatedClassification:
+    """check_dns_leaks: ISOLATED classification and its distinctions.
+
+    ISOLATED means: a VPN is active AND this DNS-provider interface has no
+    servers configured (servers is empty) AND no current DNS activity
+    (current_server is None).
+
+    This is distinct from:
+    - DORMANT:         VPN active, servers non-empty, current_server None.
+    - NOT_APPLICABLE:  DNS-provider type, no DNS activity, NO VPN active;
+                       or non-DNS-provider type regardless of VPN state.
+    - NO_VPN:          No VPN active; applies to DNS-provider types that
+                       have configured servers but no current_server.
+    """
+
+    def test_protonvpn_ethernet_stripped_gets_isolated(self) -> None:
+        """Physical interface with DNS stripped by VPN client must be ISOLATED.
+
+        ProtonVPN removes DNS servers from physical interfaces when the tunnel
+        connects.  The result is servers=(), current_server=None, with a VPN
+        active on the system.  This must be ISOLATED, not NOT_APPLICABLE.
+        """
+        eth = _iface("eth0", InterfaceType.ETHERNET)   # servers=(), current_server=None
+        tun = _iface("tun0", InterfaceType.VPN, ("10.8.0.1",),
+                     current_server="10.8.0.1")
+        result = check_dns_leaks([eth, tun])
+        eth_out = next(r for r in result if r.name == "eth0")
+        assert eth_out.dns.leak_status == DnsLeakStatus.ISOLATED
+
+    def test_isolated_vs_dormant_distinction(self) -> None:
+        """ISOLATED (no servers) and DORMANT (servers present) must be distinct.
+
+        Both interfaces have no current_server and a VPN active.  The only
+        difference is whether servers is populated.  This test confirms that
+        the classification correctly distinguishes the two states.
+        """
+        # eth0 has configured servers -> stepped aside -> DORMANT
+        eth_dormant = _iface("eth0", InterfaceType.ETHERNET, ("192.168.1.1",),
+                             current_server=None)
+        # wlp1s0 has no servers -> isolated -> ISOLATED
+        wlp_isolated = _iface("wlp1s0", InterfaceType.WIRELESS,
+                               current_server=None)   # servers=()
+        tun = _iface("tun0", InterfaceType.VPN, ("10.8.0.1",),
+                     current_server="10.8.0.1")
+        result = check_dns_leaks([eth_dormant, wlp_isolated, tun])
+        statuses = {r.name: r.dns.leak_status for r in result}
+        assert statuses["eth0"] == DnsLeakStatus.DORMANT
+        assert statuses["wlp1s0"] == DnsLeakStatus.ISOLATED
+
+    def test_no_sim_modem_vpn_active_gets_isolated(self) -> None:
+        """Cellular modem with no SIM while VPN active must be ISOLATED.
+
+        A no-SIM modem (servers=(), current_server=None) is observationally
+        identical to a ProtonVPN-stripped ethernet interface.  Both receive
+        ISOLATED: the VPN is active and this interface is not contributing
+        any DNS activity.  The tool cannot distinguish the cause.
+        """
+        modem = _iface("wwp0s20f0u3", InterfaceType.CELLULAR)  # servers=()
+        tun = _iface("tun0", InterfaceType.VPN, ("10.8.0.1",),
+                     current_server="10.8.0.1")
+        result = check_dns_leaks([modem, tun])
+        modem_out = next(r for r in result if r.name == "wwp0s20f0u3")
+        assert modem_out.dns.leak_status == DnsLeakStatus.ISOLATED
+
+    def test_dns_provider_no_dns_no_vpn_gets_not_applicable(self) -> None:
+        """DNS-provider type with no DNS activity and no VPN must be NOT_APPLICABLE.
+
+        When no VPN is active, a DNS-provider interface with no servers and no
+        current_server cannot be classified meaningfully -- there is no tunnel
+        to compare against.  NOT_APPLICABLE is preserved for this case.
+        This distinguishes it from the ISOLATED case (same interface state
+        but VPN active) and ensures the two are not conflated.
+        """
+        modem = _iface("wwp0s20f0u3", InterfaceType.CELLULAR)  # servers=()
+        # No VPN interface in the list.
+        result = check_dns_leaks([modem])
+        modem_out = result[0]
+        assert modem_out.dns.leak_status == DnsLeakStatus.NOT_APPLICABLE
 
 
 class TestCheckDnsLeaksExtended:

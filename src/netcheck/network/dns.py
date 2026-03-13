@@ -35,18 +35,25 @@ classification requires a system-wide view.
 
 **Per-interface classification** (uses ``current_server`` only):
     1. If no VPN is active (``vpn_dns`` is empty): ``NO_VPN``.
-    2. If ``current_server`` is ``None``: ``DORMANT`` -- the VPN is active
-       and this interface has correctly stepped aside; systemd-resolved is
-       not routing queries through it.  This is a positive security signal:
-       it confirms the VPN's DNS isolation is working.
-    3. If ``current_server`` is in ``isp_dns``: ``LEAK`` -- active queries
+    2. If ``current_server`` is ``None`` and ``servers`` is non-empty:
+       ``DORMANT`` -- the VPN is active and this interface has correctly
+       stepped aside from its configured DNS role; systemd-resolved is not
+       routing queries through it.  This is a positive security signal.
+    3. If ``current_server`` is ``None`` and ``servers`` is empty:
+       ``ISOLATED`` -- the VPN is active and this interface has no DNS
+       server configuration at all.  The tool cannot determine whether the
+       VPN client removed the servers (e.g. ProtonVPN) or the interface
+       never had DNS in its current operational state (e.g. a cellular modem
+       with no SIM).  Both produce the same observable state; both are
+       positive security signals: the interface is not resolving any queries.
+    4. If ``current_server`` is in ``isp_dns``: ``LEAK`` -- active queries
        go to the ISP resolver while a VPN is running.
-    4. If ``current_server`` is in ``vpn_dns``: ``OK`` -- queries go through
+    5. If ``current_server`` is in ``vpn_dns``: ``OK`` -- queries go through
        the VPN provider's resolver.
-    5. If ``current_server`` is in ``PUBLIC_DNS_SERVERS``: ``PUBLIC`` --
+    6. If ``current_server`` is in ``PUBLIC_DNS_SERVERS``: ``PUBLIC`` --
        using a public resolver (Cloudflare/Google/Quad9); not an ISP leak
        but not optimal.
-    6. Otherwise: ``WARN`` -- unknown resolver; investigate.
+    7. Otherwise: ``WARN`` -- unknown resolver; investigate.
 
 ``query_status`` semantics
 --------------------------
@@ -264,13 +271,17 @@ def _compute_leak_status(
     Classification is based on ``current_server`` -- the address that
     systemd-resolved is *actively* using for this interface.
 
-    When a VPN is active and ``current_server`` is ``None``, the interface
-    is dormant: systemd-resolved has shifted the active DNS designation to
-    the VPN interface.  This is a positive security signal -- the VPN's DNS
-    isolation is working -- and is represented as ``DORMANT`` rather than
-    ``NO_VPN``.  The two are semantically distinct: ``NO_VPN`` means no VPN
-    is active system-wide; ``DORMANT`` means the VPN precondition is met and
-    this interface correctly stepped aside.
+    When a VPN is active and ``current_server`` is ``None``, the result
+    depends on whether ``servers`` is populated:
+
+    - Non-empty ``servers``: ``DORMANT`` -- the interface was a DNS provider
+      that has correctly stepped aside for the VPN.  A positive security
+      signal confirming DNS isolation is working.
+    - Empty ``servers``: ``ISOLATED`` -- the VPN is active and this interface
+      has no DNS configuration at all.  The cause is unknowable from
+      observable state (VPN client stripped the servers, or the interface
+      never had DNS in its current state); both are represented as
+      ``ISOLATED``.
 
     Args:
         dns_config: The interface's DNS configuration.
@@ -285,12 +296,28 @@ def _compute_leak_status(
 
     active = dns_config.current_server
     if active is None:
-        # VPN is active but this interface has no current DNS activity.
-        # systemd-resolved correctly shifted the active designation to the
-        # VPN interface.  DORMANT is a positive security signal -- it means
-        # DNS isolation is working; this interface cannot be leaking.
-        logger.debug("leak_status=DORMANT: current_server is None (stepped aside for VPN)")
-        return DnsLeakStatus.DORMANT
+        if dns_config.servers:
+            # VPN is active; this interface has configured servers but none
+            # is currently active -- systemd-resolved shifted the active
+            # designation to the VPN interface.  DORMANT is a positive
+            # security signal: this interface cannot be leaking.
+            logger.debug(
+                "leak_status=DORMANT: current_server is None, servers=%s"
+                " (stepped aside for VPN)",
+                dns_config.servers,
+            )
+            return DnsLeakStatus.DORMANT
+        # VPN is active; this interface has no servers and no current_server.
+        # The tool cannot distinguish whether the VPN client stripped the
+        # servers (e.g. ProtonVPN) or the interface never had DNS in its
+        # current state (e.g. no-SIM modem).  Both are observationally
+        # identical and both are positive security signals: the interface is
+        # not routing any DNS queries.
+        logger.debug(
+            "leak_status=ISOLATED: current_server is None, servers empty"
+            " (VPN active, no DNS configuration present)",
+        )
+        return DnsLeakStatus.ISOLATED
 
     active_set = frozenset({active})
 
@@ -313,10 +340,13 @@ def _compute_leak_status(
     return DnsLeakStatus.WARN
 
 
-def _should_skip_leak_detection(iface: InterfaceInfo) -> bool:
+def _should_skip_leak_detection(
+    iface: InterfaceInfo,
+    vpn_dns: frozenset[str],
+) -> bool:
     """Return ``True`` when ``_with_leak_status`` must assign ``NOT_APPLICABLE``.
 
-    Two independent conditions both mandate ``NOT_APPLICABLE``; this helper
+    Two independent conditions mandate ``NOT_APPLICABLE``; this helper
     encapsulates them so that the action (assigning ``NOT_APPLICABLE``) is
     written exactly once in ``_with_leak_status``.
 
@@ -324,20 +354,23 @@ def _should_skip_leak_detection(iface: InterfaceInfo) -> bool:
     The interface type is not in ``_DNS_PROVIDER_TYPES`` (loopback, VPN,
     bridge, virtual, unknown) *and* ``current_server`` is ``None``.
     These types cannot step aside for a VPN: they never act as DNS providers
-    to begin with, so ``DORMANT`` is semantically incorrect for them.
+    to begin with, so ``DORMANT`` and ``ISOLATED`` are semantically incorrect
+    for them.
     A non-DNS-provider type with an active ``current_server`` is not
     short-circuited here; it proceeds to ``_compute_leak_status`` normally,
     where it may receive ``OK`` (e.g. a VPN interface whose resolver is in
     ``vpn_dns``).
 
-    **Condition 2 -- state-based exclusion.**
+    **Condition 2 -- state-based exclusion (no VPN active only).**
     The interface is a DNS-provider type *but* its DNS query status is not
-    ``OK`` and it has no ``current_server``.  This covers DNS-provider
-    interfaces that have never provided DNS in their current state -- for
-    example a cellular modem with no SIM (``query_status=UNAVAILABLE``,
-    ``servers=()``).  Labelling such an interface ``DORMANT`` would
-    misrepresent it as having stepped aside for a VPN, implying prior DNS
-    activity that never occurred.
+    ``OK``, it has no ``current_server``, **and no VPN is active on the
+    system** (``vpn_dns`` is empty).  When no VPN is active there is no
+    tunnel to compare DNS servers against, so classification is not
+    meaningful for an interface with no DNS activity.
+    When a VPN *is* active and the same state is observed (no servers, no
+    current_server), the interface is not skipped: it proceeds to
+    ``_compute_leak_status``, which returns ``ISOLATED`` -- a truthful
+    signal that the interface is not routing DNS while the VPN is running.
 
     Both conditions share the ``current_server is None`` sub-condition.
     When ``current_server`` is set, neither condition can fire and the
@@ -345,6 +378,8 @@ def _should_skip_leak_detection(iface: InterfaceInfo) -> bool:
 
     Args:
         iface: The interface under evaluation.
+        vpn_dns: All DNS server addresses from VPN interfaces system-wide.
+                 Non-empty when at least one VPN interface is active.
 
     Returns:
         ``True`` if ``NOT_APPLICABLE`` must be assigned; ``False`` if
@@ -352,10 +387,11 @@ def _should_skip_leak_detection(iface: InterfaceInfo) -> bool:
     """
     if iface.dns.current_server is not None:
         return False
-    return (
-        iface.interface_type not in _DNS_PROVIDER_TYPES
-        or iface.dns.query_status != DataStatus.OK
-    )
+    if iface.interface_type not in _DNS_PROVIDER_TYPES:
+        return True  # Condition 1: structural exclusion
+    if iface.dns.query_status != DataStatus.OK and not vpn_dns:
+        return True  # Condition 2: no DNS activity and no VPN active
+    return False
 
 
 def _with_leak_status(
@@ -366,14 +402,14 @@ def _with_leak_status(
     """Return a copy of ``iface`` with ``dns.leak_status`` computed.
 
     Delegates the skip decision to ``_should_skip_leak_detection``, which
-    encapsulates the two independent conditions that both mandate
-    ``NOT_APPLICABLE`` (structural exclusion by interface type, and
-    state-based exclusion for DNS-provider types with no DNS activity).
+    encapsulates the two independent conditions that mandate ``NOT_APPLICABLE``
+    (structural exclusion by interface type, and state-based exclusion for
+    DNS-provider types with no DNS activity when no VPN is active).
     See ``_should_skip_leak_detection`` for the full rationale.
 
     When neither skip condition applies, delegates to
-    ``_compute_leak_status`` for the full DORMANT/LEAK/OK/PUBLIC/WARN
-    classification.
+    ``_compute_leak_status`` for the full
+    DORMANT/ISOLATED/LEAK/OK/PUBLIC/WARN classification.
 
     Args:
         iface: The interface to update.
@@ -383,7 +419,7 @@ def _with_leak_status(
     Returns:
         New ``InterfaceInfo`` with updated ``dns.leak_status``.
     """
-    if _should_skip_leak_detection(iface):
+    if _should_skip_leak_detection(iface, vpn_dns):
         new_dns = dataclasses.replace(iface.dns, leak_status=DnsLeakStatus.NOT_APPLICABLE)
         return dataclasses.replace(iface, dns=new_dns)
     status = _compute_leak_status(iface.dns, vpn_dns, isp_dns)

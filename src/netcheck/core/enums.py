@@ -119,7 +119,8 @@ class DnsLeakStatus(StrEnum):
 
     ``DORMANT``
         A VPN is active on the system, but this interface has no currently
-        active DNS resolution (``current_server`` is ``None``).
+        active DNS resolution (``current_server`` is ``None``), even though
+        it has at least one DNS server configured (``servers`` is non-empty).
         systemd-resolved has correctly shifted the active designation to the
         VPN interface.  This interface cannot be leaking because it is not
         resolving any queries.
@@ -130,19 +131,51 @@ class DnsLeakStatus(StrEnum):
         stepped aside.  Monitoring tools can use this to verify that all
         physical interfaces went dormant when the VPN connected.
 
+        Distinct from ``ISOLATED``: ``DORMANT`` requires at least one
+        configured server address, which confirms the interface was (or is)
+        a DNS provider that stepped aside for the VPN.  ``ISOLATED`` covers
+        the case where no server configuration is present at all.
+
+    ``ISOLATED``
+        A VPN is active on the system, and this DNS-provider interface has
+        no DNS servers configured and no current DNS activity (``servers``
+        is empty and ``current_server`` is ``None``).
+
+        This covers two situations that are observationally identical at
+        the time the tool runs:
+
+        - The VPN client explicitly removed the interface's DNS
+          configuration as part of its isolation mechanism (e.g. ProtonVPN
+          strips servers from physical interfaces when the tunnel connects).
+        - The interface has no DNS in its current operational state (e.g. a
+          cellular modem with no SIM inserted) while a VPN is active
+          elsewhere on the system.
+
+        Both produce the same observable state: no servers, no active
+        resolver, VPN active.  The tool cannot distinguish them and uses
+        ``ISOLATED`` to represent both truthfully.  Like ``DORMANT``,
+        ``ISOLATED`` is a positive security signal on physical interfaces:
+        the interface is not resolving any queries while the VPN is active.
+
+        Distinct from ``DORMANT``: ``DORMANT`` requires non-empty
+        ``servers`` (evidence that the interface stepped aside from a
+        configured DNS role).  ``ISOLATED`` applies when no server
+        configuration is present at all.
+
     ``NOT_APPLICABLE``
         This interface is structurally or operationally excluded from DNS
-        leak detection, regardless of VPN state.  Two conditions produce
-        this status:
+        leak detection.  Two conditions produce this status:
 
         - The interface type is not a DNS provider (loopback, VPN, bridge,
           virtual, unknown): such interfaces never act as DNS providers and
           cannot meaningfully step aside for a VPN.
         - The interface is a DNS-provider type (ethernet, wireless, cellular,
           tether) but has no current DNS activity in its present state
-          (``query_status`` is not ``OK`` and ``current_server`` is ``None``):
-          labelling it ``DORMANT`` would imply prior DNS activity that never
-          occurred.
+          (``query_status`` is not ``OK`` and ``current_server`` is ``None``)
+          **and no VPN is active on the system**: when no VPN is active,
+          there is no tunnel to compare against, so classification is not
+          meaningful.  When a VPN is active and the same state is observed,
+          the status is ``ISOLATED`` instead.
 
         Also used as a pre-computation placeholder until ``check_dns_leaks``
         assigns the real status.
@@ -165,6 +198,7 @@ class DnsLeakStatus(StrEnum):
     PUBLIC = "public"
     OK = "ok"
     DORMANT = "dormant"
+    ISOLATED = "isolated"
     NOT_APPLICABLE = "not_applicable"
     NO_VPN = "no_vpn"
 

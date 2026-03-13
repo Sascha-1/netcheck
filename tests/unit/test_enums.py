@@ -113,8 +113,11 @@ class TestDnsLeakStatus:
     """Tests for DnsLeakStatus enumeration."""
 
     def test_all_members_exist(self) -> None:
-        """All seven leak-status classifications must be present."""
-        expected = {"OK", "PUBLIC", "LEAK", "WARN", "DORMANT", "NOT_APPLICABLE", "NO_VPN"}
+        """All eight leak-status classifications must be present."""
+        expected = {
+            "OK", "PUBLIC", "LEAK", "WARN",
+            "DORMANT", "ISOLATED", "NOT_APPLICABLE", "NO_VPN",
+        }
         assert {m.name for m in DnsLeakStatus} == expected
 
     @pytest.mark.parametrize("member, expected_value", [
@@ -123,6 +126,7 @@ class TestDnsLeakStatus:
         (DnsLeakStatus.PUBLIC,         "public"),
         (DnsLeakStatus.OK,             "ok"),
         (DnsLeakStatus.DORMANT,        "dormant"),
+        (DnsLeakStatus.ISOLATED,       "isolated"),
         (DnsLeakStatus.NOT_APPLICABLE, "not_applicable"),
         (DnsLeakStatus.NO_VPN,         "no_vpn"),
     ])
@@ -186,9 +190,30 @@ class TestDnsLeakStatus:
         """
         assert len({DnsLeakStatus.DORMANT, DnsLeakStatus.NOT_APPLICABLE}) == 2
 
+    def test_isolated_is_semantically_distinct_from_dormant_and_not_applicable(
+        self,
+    ) -> None:
+        """ISOLATED, DORMANT, and NOT_APPLICABLE must all be distinct members.
+
+        They encode different facts: DORMANT means VPN active, servers
+        non-empty, no current DNS activity (stepped aside); ISOLATED means
+        VPN active, servers empty, no current DNS activity (no configuration
+        present); NOT_APPLICABLE means structurally or operationally excluded
+        regardless of VPN state.  None may be accidentally aliased.
+
+        Set cardinality is the mypy-clean way to assert enum distinctness;
+        see ``test_dormant_is_semantically_distinct_from_not_applicable``
+        for the full rationale.
+        """
+        assert len({
+            DnsLeakStatus.ISOLATED,
+            DnsLeakStatus.DORMANT,
+            DnsLeakStatus.NOT_APPLICABLE,
+        }) == 3
+
     def test_member_count(self) -> None:
-        """There must be exactly seven members."""
-        assert len(list(DnsLeakStatus)) == 7
+        """There must be exactly eight members."""
+        assert len(list(DnsLeakStatus)) == 8
 
     def test_all_members_are_distinct(self) -> None:
         """No two members may share the same string value."""

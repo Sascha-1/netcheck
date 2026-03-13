@@ -30,6 +30,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   routing.  Downstream consumers that treat unknown values as `not_applicable`
   are unaffected by the addition.
 
+- `DnsLeakStatus.ISOLATED` (`"isolated"`) — new enum member for DNS-provider
+  interfaces that have no DNS servers configured and no current DNS activity
+  while a VPN is active on the system.  This covers two observationally
+  identical situations: a VPN client that explicitly strips DNS server
+  configuration from physical interfaces during tunnel establishment (e.g.
+  ProtonVPN), and a physical interface that has no DNS in its current
+  operational state (e.g. a cellular modem with no SIM inserted) while a VPN
+  is active elsewhere.  The tool cannot distinguish these cases from observable
+  state alone and uses `ISOLATED` to represent both truthfully.
+  `ISOLATED` is distinct from `DORMANT`, which requires at least one
+  configured server address (evidence that the interface stepped aside from a
+  DNS role).  Like `DORMANT`, `ISOLATED` is a positive security signal on
+  physical interfaces: the interface is not resolving any queries while the
+  VPN is running.  Downstream consumers that treat unknown values as
+  `not_applicable` are unaffected by the addition.
+
 ### Changed
 
 **JSON schema** *(breaking)*
