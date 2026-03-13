@@ -321,6 +321,14 @@ def _compute_leak_status(
 
     active_set = frozenset({active})
 
+    # Check order is intentional and load-bearing.  isp_dns is tested before
+    # vpn_dns because an ISP server that also appears in vpn_dns (unusual but
+    # possible if a user has manually added their ISP's resolver to the VPN
+    # configuration) represents a genuine leak: queries go to a server the ISP
+    # controls.  Security takes priority over the VPN classification.
+    # PUBLIC_DNS_SERVERS is tested last among the positive matches because a
+    # public resolver is the least harmful outcome when a VPN is active.
+    # WARN is the catch-all for any server that matches none of the above.
     if active_set & isp_dns:
         logger.debug(
             "leak_status=LEAK: active server %s is in isp_dns", active,
