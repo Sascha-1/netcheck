@@ -13,7 +13,9 @@ on the affected interface field and continues.  That graceful degradation is
 appropriate for *optional* tools (e.g. ``lspci`` unavailable means no PCI
 device name, not a broken run).  But none of the five tools here is optional:
 without ``ip`` there are no interfaces; without ``resolvectl`` there are no
-DNS records; without ``mmcli`` cellular interfaces are invisible; without
+DNS records; without ``mmcli`` cellular interfaces lose hardware device
+identification and modem state (detection by ``ww`` name prefix still fires,
+but no ModemManager record backs it); without
 ``lspci`` and ``lsusb`` hardware identification is entirely absent.  Failing
 before collection gives the user one clear diagnosis instead of five opaque
 data-absent columns.
